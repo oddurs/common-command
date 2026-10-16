@@ -93,6 +93,14 @@ func titles(_ ranked: [Ranked]) -> [String] { ranked.map(\.item.title) }
         #expect(Ranker.rank(apps, query: "saf", usage: usage, now: now, limit: 1).first?.item.title == "Safari")
     }
 
+    @Test func aChoiceForALongerQueryLeansAShorterOneTheSameWay() {
+        var usage = Usage()
+        // Equally frequent, so only the remembered query can separate them.
+        usage.record("app:Safari", query: "", at: now)
+        usage.record("app:Sublime Text", query: "sublime", at: now)
+        #expect(Ranker.rank(apps, query: "s", usage: usage, now: now, limit: 1).first?.item.title == "Sublime Text")
+    }
+
     @Test func alternativeNamesMatchWithoutHighlighting() {
         let localised = [app("Systemeinstellungen", alternatives: ["System Settings"])]
         let ranked = Ranker.rank(localised, query: "system set", usage: Usage(), now: now, limit: 1)
@@ -193,6 +201,26 @@ func titles(_ ranked: [Ranked]) -> [String] { ranked.map(\.item.title) }
         var usage = Usage()
         usage.record("a", query: "Café ", at: now)
         #expect(usage.boost(for: "a", query: "cafe", at: now) >= Usage.choiceBoost)
+    }
+
+    @Test func sharedStartsEarnAShareOfTheBoost() {
+        var usage = Usage()
+        usage.record("safari", query: "safari", at: now)
+        usage.record("saf-tool", query: "saf", at: now)
+        usage.record("slack", query: "sl", at: now)
+        #expect(usage.choiceBoosts("safari") == ["safari": 120, "saf-tool": 30])
+        #expect(usage.choiceBoosts("sa") == ["safari": 20, "saf-tool": 40])
+        #expect(usage.choiceBoosts("safar") == ["safari": 50, "saf-tool": 36])
+        #expect(usage.choiceBoosts("s") == ["safari": 10, "saf-tool": 20, "slack": 30])
+        #expect(usage.choiceBoosts("x").isEmpty)
+        #expect(usage.choiceBoosts("").isEmpty)
+    }
+
+    @Test func anItemChosenForSeveralQueriesTakesTheBestBoost() {
+        var usage = Usage()
+        usage.record("safari", query: "sa", at: now)
+        usage.record("safari", query: "safari", at: now)
+        #expect(usage.choiceBoosts("saf") == ["safari": 40])
     }
 
     @Test func storageStaysBounded() {

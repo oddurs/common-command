@@ -22,7 +22,7 @@ public enum Ranker {
     ) -> [Ranked] {
         let q = Fuzzy.prepare(query)
         guard !q.isEmpty, limit > 0 else { return [] }
-        let key = Usage.key(query)
+        let booster = usage.booster(for: query, at: now)
         // Only the best few are ever shown, so keep those in order instead of sorting every match.
         var top: [(ranked: Ranked, length: Int)] = []
         top.reserveCapacity(limit + 1)
@@ -43,7 +43,7 @@ public enum Ranker {
                 highlightsTitle = false
             }
             guard let matchScore else { continue }
-            let score = matchScore + candidate.weight + usage.boost(for: candidate.item.id, key: key, at: now)
+            let score = matchScore + candidate.weight + booster.boost(for: candidate.item.id)
             let length = candidate.names[0].keys.count
             if top.count == limit, let last = top.last, !isOrderedBefore(score, length, candidate.item, last) {
                 continue
