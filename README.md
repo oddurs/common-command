@@ -9,7 +9,7 @@ Common Command is built to feel like part of macOS:
 
 - **It matches your Mac.** The panel follows light and dark mode, uses Liquid Glass on macOS 26 (the popover material before that), and highlights with your accent colour. Choose a fixed theme, a solid background, or a size in Settings.
 - **It stays out of the way.** The panel never activates the app, so the app you were in stays frontmost and keeps its menu bar. Escape, or a click anywhere else, returns you to it with nothing to restore.
-- **It learns.** Whatever you choose for a query comes first the next time you type it, and things you open often rise for every query. Usage decays with a one-week half-life, so last year's habits fade.
+- **It learns.** Whatever you choose for a query comes first the next time you type it, and leans the same way for a shorter start: choose Safari for "safari" once, and "sa" prefers it too. Things you open often rise for every query. Usage decays with a one-week half-life, so last year's habits fade.
 - **Typing is forgiving.** "vsc" finds Visual Studio Code, "sys set" finds System Settings, "cafe" finds Café. Matched letters are drawn in bold.
 
 Free and open source under the MIT licence. No network access except the web searches and links you open, no analytics, no helper tools, and no Accessibility or Full Disk Access permissions.

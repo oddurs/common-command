@@ -22,9 +22,9 @@ public enum Ranker {
     ) -> [Ranked] {
         let q = Fuzzy.prepare(query)
         guard !q.isEmpty, limit > 0 else { return [] }
-        let key = Usage.key(query)
+        let booster = usage.booster(for: query, at: now)
         // Only the best few are ever shown, so keep those in order instead of sorting every match.
-        var top: [(ranked: Ranked, length: Int)] = []
+        var top: [(ranked: Ranked, name: [UInt32])] = []
         top.reserveCapacity(limit + 1)
         for candidate in candidates {
             var best: Match?
@@ -43,29 +43,28 @@ public enum Ranker {
                 highlightsTitle = false
             }
             guard let matchScore else { continue }
-            let score = matchScore + candidate.weight + usage.boost(for: candidate.item.id, key: key, at: now)
-            let length = candidate.names[0].keys.count
-            if top.count == limit, let last = top.last, !isOrderedBefore(score, length, candidate.item, last) {
+            let score = matchScore + candidate.weight + booster.boost(for: candidate.item.id)
+            let name = candidate.names[0].keys
+            if top.count == limit, let last = top.last, !isOrderedBefore(score, name, last) {
                 continue
             }
             let entry = (
                 Ranked(item: candidate.item, score: score, highlights: highlightsTitle ? best?.positions ?? [] : []),
-                length
+                name
             )
-            let index =
-                top.firstIndex { !isOrderedBefore($0.ranked.score, $0.length, $0.ranked.item, entry) } ?? top.count
+            let index = top.firstIndex { !isOrderedBefore($0.ranked.score, $0.name, entry) } ?? top.count
             top.insert(entry, at: index)
             if top.count > limit { top.removeLast() }
         }
         return top.map(\.ranked)
     }
 
-    /// Higher score first; on a tie the shorter name, then alphabetical.
-    static func isOrderedBefore(_ score: Int, _ length: Int, _ item: Item, _ other: (ranked: Ranked, length: Int))
-        -> Bool
-    {
+    /// Higher score first; on a tie the shorter name, then alphabetical by folded name. A one-letter query
+    /// ties hundreds of names, so this compares the keys already folded for matching rather than calling
+    /// `localizedStandardCompare`, which costs more than the match itself.
+    static func isOrderedBefore(_ score: Int, _ name: [UInt32], _ other: (ranked: Ranked, name: [UInt32])) -> Bool {
         if score != other.ranked.score { return score > other.ranked.score }
-        if length != other.length { return length < other.length }
-        return item.title.localizedStandardCompare(other.ranked.item.title) == .orderedAscending
+        if name.count != other.name.count { return name.count < other.name.count }
+        return name.lexicographicallyPrecedes(other.name)
     }
 }
