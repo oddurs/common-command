@@ -17,6 +17,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Liquid Glass on macOS 26 and the popover material on earlier versions, or a solid background.
 - System Settings topics and keywords from System Settings' own search terms, so "dark mode", "low power", or "firewall" find the right pane, shown with the pane's icon.
 - A result chosen for a query also leans shorter and longer starts of that query its way, so you can type less next time.
+- Unit conversions such as "10 km to mi", "70 f in c", or "5 GB in MB", offline, with Return to copy.
 
 ### Fixed
 

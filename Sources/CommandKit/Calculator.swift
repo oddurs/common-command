@@ -16,21 +16,28 @@ public enum Calculator {
     /// The value of `input`, or nil when it isn't arithmetic. A bare number isn't: the field is for
     /// searching, and "2024" or "1Password" shouldn't turn the top result into a calculation.
     public static func evaluate(_ input: String, locale: Locale = .current) -> Double? {
+        value(of: input, locale: locale, requiringOperation: true)
+    }
+
+    /// `requiringOperation: false` accepts a bare number too, for the amount in "10 km to mi".
+    static func value(of input: String, locale: Locale, requiringOperation: Bool) -> Double? {
         let decimal = Character(locale.decimalSeparator ?? ".")
-        guard let tokens = tokenize(input, decimalSeparator: decimal), tokens.contains(where: \.isOperation),
-            tokens.contains(where: \.isNumber)
+        guard let tokens = tokenize(input, decimalSeparator: decimal),
+            !requiringOperation || tokens.contains(where: \.isOperation), tokens.contains(where: \.isNumber)
         else { return nil }
         var parser = Parser(tokens: tokens)
         guard let value = parser.parseExpression(), parser.atEnd, value.isFinite else { return nil }
         return value
     }
 
-    /// The value as people read it in their region, with up to 12 significant digits.
-    public static func format(_ value: Double, locale: Locale = .current, grouping: Bool = true) -> String {
+    /// The value as people read it in their region, with up to `digits` significant digits.
+    public static func format(_ value: Double, locale: Locale = .current, grouping: Bool = true, digits: Int = 12)
+        -> String
+    {
         let formatter = NumberFormatter()
         formatter.locale = locale
         formatter.usesSignificantDigits = true
-        formatter.maximumSignificantDigits = 12
+        formatter.maximumSignificantDigits = digits
         formatter.usesGroupingSeparator = grouping
         let magnitude = abs(value)
         formatter.numberStyle = magnitude != 0 && (magnitude >= 1e15 || magnitude < 1e-9) ? .scientific : .decimal
