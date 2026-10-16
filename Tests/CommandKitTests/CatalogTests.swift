@@ -134,3 +134,51 @@ import Testing
         #expect(PanelSize.allCases.allSatisfy { $0.width < 680 })
     }
 }
+
+@Suite struct FileResultsTests {
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let home = "/Users/me"
+
+    func found(_ path: String, folder: Bool = false, used: TimeInterval? = 0) -> FileResults.Found {
+        FileResults.Found(path: path, isFolder: folder, lastUsed: used.map { now.addingTimeInterval(-$0) })
+    }
+
+    @Test func aFileSpotlightListsTwiceShowsOnce() {
+        let results = FileResults.candidates(
+            [found("/Users/me/Notes/calculators", folder: true), found("/Users/me/Notes/calculators", folder: true)],
+            home: home, now: now)
+        #expect(results.count == 1)
+    }
+
+    @Test func leavesOutClutter() {
+        let results = FileResults.candidates(
+            [
+                found("/Users/me/Library/Caches/x.txt"), found("/Users/me/.config/x.txt"),
+                found("/Users/me/code/app/target/doc/x.js"), found("/Users/me/code/web/node_modules/x/index.js"),
+                found("/Users/me/Documents/x.txt"),
+            ], home: home, now: now)
+        #expect(results.map(\.item.title) == ["x.txt"])
+        #expect(results.first?.item.subtitle == "~/Documents")
+    }
+
+    @Test func abbreviatesOnlyTheHomeFolderItself() {
+        let results = FileResults.candidates(
+            [found("/Users/me/a.txt"), found("/Users/me2/b.txt"), found("/Volumes/Disk/c.txt")], home: home, now: now)
+        #expect(results.map(\.item.subtitle) == ["~", "/Users/me2", "/Volumes/Disk"])
+    }
+
+    @Test func recentlyUsedFilesRankHigherThanNeverOpenedOnes() {
+        let results = FileResults.candidates(
+            [
+                found("/Users/me/week.txt", used: 3600), found("/Users/me/old.txt", used: 400 * 86400),
+                found("/Users/me/generated.txt", used: nil),
+            ], home: home, now: now)
+        #expect(results.map(\.weight) == [8, 0, -12])
+    }
+
+    @Test func foldersAreFolders() {
+        let results = FileResults.candidates([found("/Users/me/Projects", folder: true)], home: home, now: now)
+        #expect(results.first?.item.kind == .folder)
+        #expect(results.first?.item.fileURL?.hasDirectoryPath == true)
+    }
+}
