@@ -7,6 +7,7 @@ import SwiftUI
 final class CommandPanel: NSPanel {
     var onKeyEquivalent: ((NSEvent) -> Bool)?
     var onModifiersChange: ((NSEvent.ModifierFlags) -> Void)?
+    var onPointerMove: (() -> Void)?
 
     init() {
         super.init(
@@ -20,6 +21,7 @@ final class CommandPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         animationBehavior = .none
+        acceptsMouseMovedEvents = true
         isReleasedWhenClosed = false
         // On the current Space, including over full-screen apps, and never in ⌘` or Mission Control.
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
@@ -33,7 +35,12 @@ final class CommandPanel: NSPanel {
     }
 
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .flagsChanged { onModifiersChange?(event.modifierFlags) }
+        switch event.type {
+        case .flagsChanged: onModifiersChange?(event.modifierFlags)
+        // Before the event reaches the rows' hover tracking, so they know the pointer really moved.
+        case .mouseMoved: onPointerMove?()
+        default: break
+        }
         super.sendEvent(event)
     }
 }
@@ -61,6 +68,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.onModifiersChange = { [weak self] flags in
             self?.model.showsShortcuts = flags.intersection(.deviceIndependentFlagsMask) == .command
         }
+        panel.onPointerMove = { [weak self] in self?.model.pointerMoved = true }
         model.onResultsChange = { [weak self] in self?.resize() }
         library.onChange = { [weak self] in
             guard let self, panel.isVisible else { return }
@@ -80,6 +88,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         buildContentIfNeeded()
         panel.appearance = preferences.theme.appearance
         model.showsShortcuts = false
+        model.pointerMoved = false
         model.update()
         position()
         panel.makeKeyAndOrderFront(nil)

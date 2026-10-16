@@ -60,6 +60,10 @@ private struct ResultList: View {
                         )
                         .id(index)
                         .onTapGesture { choose(index) }
+                        .onContinuousHover { phase in
+                            if case .active = phase { model.hover(index) }
+                        }
+                        .dragsFile(ranked.item.fileURL)
                     }
                 }
                 .padding(size.listPadding)
@@ -68,6 +72,17 @@ private struct ResultList: View {
             .scrollDisabled(model.results.count <= visibleRows)
             .frame(height: CGFloat(min(model.results.count, visibleRows)) * size.rowHeight + 2 * size.listPadding)
             .onChange(of: model.selection) { _, selection in proxy.scrollTo(selection) }
+        }
+    }
+}
+
+extension View {
+    /// Apps, files, and folders drag out like they do from Finder: into the Dock, a folder, or a document.
+    @ViewBuilder func dragsFile(_ url: URL?) -> some View {
+        if let url {
+            onDrag { NSItemProvider(object: url as NSURL) }
+        } else {
+            self
         }
     }
 }
