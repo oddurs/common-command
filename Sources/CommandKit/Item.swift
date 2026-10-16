@@ -21,16 +21,20 @@ public struct Item: Identifiable, Sendable, Hashable {
     public let subtitle: String
     public let kind: Kind
     public let action: Action
+    /// A file whose icon stands for the item when it isn't a file itself, such as a System Settings pane's
+    /// extension.
+    public let iconFile: URL?
 
-    public init(id: String, title: String, subtitle: String, kind: Kind, action: Action) {
+    public init(id: String, title: String, subtitle: String, kind: Kind, action: Action, iconFile: URL? = nil) {
         self.id = id
         self.title = title
         self.subtitle = subtitle
         self.kind = kind
         self.action = action
+        self.iconFile = iconFile
     }
 
-    /// The file behind the item, for its icon and for Reveal in Finder.
+    /// The file behind the item, for Reveal in Finder.
     public var fileURL: URL? {
         if case .open(let url) = action, url.isFileURL { return url }
         return nil
@@ -38,18 +42,29 @@ public struct Item: Identifiable, Sendable, Hashable {
 }
 
 /// An item with the names it can be found by. The title comes first; the others are alternatives, such
-/// as an app's file name when its display name is localised.
+/// as an app's file name when its display name is localised. Keywords match only from their start, the
+/// way a word you'd think of matches: "dark" finds the Appearance pane through "Dark Mode".
 public struct Candidate: Sendable {
     public let item: Item
     public let names: [SearchText]
+    let keywords: [[UInt32]]
     /// Added to every match, so an app outranks a settings pane with an equally good name. Small, so a
     /// clearly closer name still wins: "Bluetooth" the pane over "Bluetooth File Exchange" the app.
     public let weight: Int
 
-    public init(_ item: Item, alternatives: [String] = [], weight: Int = 0) {
+    public init(_ item: Item, alternatives: [String] = [], keywords: [String] = [], weight: Int = 0) {
         self.item = item
         var seen: Set<String> = [item.title]
         names = [SearchText(item.title)] + alternatives.filter { seen.insert($0).inserted }.map(SearchText.init)
+        // Each keyword whole, spaces dropped, and each of its words, so "darkm" and "mode" both find "Dark Mode".
+        var prepared: Set<[UInt32]> = []
+        for keyword in keywords {
+            prepared.insert(Fuzzy.prepare(keyword))
+            for word in keyword.split(whereSeparator: { $0.isWhitespace || $0 == "-" }) {
+                prepared.insert(Fuzzy.prepare(String(word)))
+            }
+        }
+        self.keywords = prepared.filter { $0.count >= 2 }.sorted { $0.lexicographicallyPrecedes($1) }
         self.weight = weight
     }
 }

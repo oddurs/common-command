@@ -154,14 +154,20 @@ final class Icons {
         switch item.kind {
         case .application, .file, .folder:
             guard let path = item.fileURL?.path else { return nil }
-            if let image = cache[path] { return image }
-            let image = NSWorkspace.shared.icon(forFile: path)
-            cache[path] = image
-            return image
-        case .settings: return settingsIcon
+            return cached(path)
+        case .settings:
+            guard let path = item.iconFile?.path else { return settingsIcon }
+            return cached(path)
         case .command: return NSApp.applicationIconImage
         case .calculation, .link, .webSearch: return nil
         }
+    }
+
+    private func cached(_ path: String) -> NSImage {
+        if let image = cache[path] { return image }
+        let image = NSWorkspace.shared.icon(forFile: path)
+        cache[path] = image
+        return image
     }
 
     static func symbol(for kind: Kind) -> String {

@@ -15,5 +15,10 @@ All notable changes to this project are documented here. The format follows [Kee
 - Keyboard control: arrows, ⌃P/⌃N, Tab, Return, ⌘Return to show in Finder, and ⌘1–⌘9 with hints while ⌘ is held.
 - Settings: shortcut, theme, size, translucency, visible results, sources, search engine, menu bar item, and open at login.
 - Liquid Glass on macOS 26 and the popover material on earlier versions, or a solid background.
+- System Settings topics and keywords from System Settings' own search terms, so "dark mode", "low power", or "firewall" find the right pane, shown with the pane's icon.
+
+### Fixed
+
+- A file Spotlight listed twice showed as two rows.
 
 [Unreleased]: https://github.com/oddurs/common-command/commits/main

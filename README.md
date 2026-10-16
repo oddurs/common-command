@@ -46,7 +46,7 @@ What a query finds, in order:
 
 1. **Links.** `github.com/apple`, `https://…`, and `localhost:3000` open in your browser. Only well-known endings count, so `notes.md` and `Info.plist` stay file searches.
 2. **Calculations.** `2^10`, `15% * 80`, `sqrt(2)`, `(1+2)(3+4)`, `5!`, with `pi`, `e`, and functions such as `sin`, `log`, and `round`. Return copies the result. Numbers follow your region, so `1,5 + 1` works where the comma is the decimal separator. A bare number isn't treated as a sum, so `1Password` and `2024` stay searches.
-3. **Apps, System Settings panes, and Common Command's own commands** (Settings, Quit).
+3. **Apps, System Settings, and Common Command's own commands** (Settings, Quit). Settings covers each pane and the topics inside it, found by the same keywords System Settings' own search uses: "dark mode" finds Appearance, "low power" finds Low Power Mode, "firewall" finds the firewall switch. Panes show their own icons. Laptop-only settings appear only on laptops.
 4. **Files and folders** in your home folder whose name has a word starting with each word you typed. Build output, caches, and dot-folders are left out, and files you've opened recently rank higher.
 5. **A web search** with your chosen engine: Google, DuckDuckGo, Bing, Kagi, Ecosia, or Startpage.
 
