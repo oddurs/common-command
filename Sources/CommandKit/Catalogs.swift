@@ -118,3 +118,54 @@ public enum FileQuery {
         return escaped
     }
 }
+
+/// Turns what Spotlight found into results: one per path, without clutter, ranked up when recently used.
+public enum FileResults {
+    public struct Found: Sendable {
+        public var path: String
+        public var isFolder: Bool
+        public var lastUsed: Date?
+
+        public init(path: String, isFolder: Bool, lastUsed: Date?) {
+            self.path = path
+            self.isFolder = isFolder
+            self.lastUsed = lastUsed
+        }
+    }
+
+    /// Caches, app internals, dot-folders, and build output match plenty of names and are never what
+    /// anyone is looking for.
+    static let clutter = ["/Library/", "/.", ".app/", "/node_modules/", "/target/", "/DerivedData/", "/__pycache__/"]
+
+    public static func candidates(_ found: [Found], home: String, now: Date) -> [Candidate] {
+        // Spotlight can list one file twice, for instance while it re-indexes it.
+        var seen: Set<String> = []
+        return found.compactMap { file in
+            guard !isClutter(file.path), seen.insert(file.path).inserted else { return nil }
+            return candidate(file, home: home, now: now)
+        }
+    }
+
+    static func isClutter(_ path: String) -> Bool {
+        clutter.contains { path.contains($0) }
+    }
+
+    static func candidate(_ file: Found, home: String, now: Date) -> Candidate {
+        let url = URL(filePath: file.path, directoryHint: file.isFolder ? .isDirectory : .notDirectory)
+        let parent = url.deletingLastPathComponent().path
+        let shown = parent == home || parent.hasPrefix(home + "/") ? "~" + parent.dropFirst(home.count) : parent
+        let item = Item(
+            id: "file:" + file.path, title: url.lastPathComponent, subtitle: shown,
+            kind: file.isFolder ? .folder : .file, action: .open(url))
+        // Something opened this week is more likely the one you mean than something from years ago, and
+        // either beats a file nobody has ever opened, which is usually generated.
+        let weight: Int
+        if let lastUsed = file.lastUsed {
+            let age = now.timeIntervalSince(lastUsed)
+            weight = age < 7 * 86400 ? 8 : age < 30 * 86400 ? 4 : 0
+        } else {
+            weight = -12
+        }
+        return Candidate(item, weight: weight)
+    }
+}

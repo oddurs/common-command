@@ -81,44 +81,15 @@ enum FileSearch {
         MDQuerySetSearchScope(mdQuery, ["kMDQueryScopeHome"] as CFArray, 0)
         MDQuerySetMaxCount(mdQuery, maximumResults)
         guard MDQueryExecute(mdQuery, CFOptionFlags(kMDQuerySynchronous.rawValue)) else { return [] }
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let now = Date()
-        return (0..<MDQueryGetResultCount(mdQuery)).compactMap { index in
+        let found = (0..<MDQueryGetResultCount(mdQuery)).compactMap { index -> FileResults.Found? in
             guard let raw = MDQueryGetResultAtIndex(mdQuery, index) else { return nil }
             let mdItem = Unmanaged<MDItem>.fromOpaque(raw).takeUnretainedValue()
-            guard let path = MDItemCopyAttribute(mdItem, "kMDItemPath" as CFString) as? String,
-                !isClutter(path)
-            else { return nil }
-            let lastUsed = MDItemCopyAttribute(mdItem, "kMDItemLastUsedDate" as CFString) as? Date
-            let type = MDItemCopyAttribute(mdItem, "kMDItemContentType" as CFString) as? String
-            return candidate(path: path, isFolder: type == "public.folder", lastUsed: lastUsed, home: home, now: now)
+            guard let path = MDItemCopyAttribute(mdItem, "kMDItemPath" as CFString) as? String else { return nil }
+            return FileResults.Found(
+                path: path,
+                isFolder: MDItemCopyAttribute(mdItem, "kMDItemContentType" as CFString) as? String == "public.folder",
+                lastUsed: MDItemCopyAttribute(mdItem, "kMDItemLastUsedDate" as CFString) as? Date)
         }
-    }
-
-    /// Caches, app internals, dot-folders, and build output match plenty of names and are never what
-    /// anyone is looking for.
-    static let clutter = ["/Library/", "/.", ".app/", "/node_modules/", "/target/", "/DerivedData/", "/__pycache__/"]
-
-    static func isClutter(_ path: String) -> Bool {
-        clutter.contains { path.contains($0) }
-    }
-
-    static func candidate(path: String, isFolder: Bool, lastUsed: Date?, home: String, now: Date) -> Candidate {
-        let url = URL(filePath: path, directoryHint: isFolder ? .isDirectory : .notDirectory)
-        let parent = url.deletingLastPathComponent().path
-        let shown = parent.hasPrefix(home) ? "~" + parent.dropFirst(home.count) : parent
-        let item = Item(
-            id: "file:" + path, title: url.lastPathComponent, subtitle: shown, kind: isFolder ? .folder : .file,
-            action: .open(url))
-        // Something opened this week is more likely the one you mean than something from years ago, and
-        // either beats a file nobody has ever opened, which is usually generated.
-        let weight: Int
-        if let lastUsed {
-            let age = now.timeIntervalSince(lastUsed)
-            weight = age < 7 * 86400 ? 8 : age < 30 * 86400 ? 4 : 0
-        } else {
-            weight = -12
-        }
-        return Candidate(item, weight: weight)
+        return FileResults.candidates(found, home: FileManager.default.homeDirectoryForCurrentUser.path, now: Date())
     }
 }
