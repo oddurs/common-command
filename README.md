@@ -42,6 +42,8 @@ Spotlight owns ⌘Space. To give it to Common Command, turn off **Show Spotlight
 | ⌘1 … ⌘9 | Open a result directly; hold ⌘ to see the numbers |
 | ⎋ | Close |
 
+The pointer works too: click a result to open it, move over one to select it, or drag an app, file, or folder out into the Dock, Finder, or a document. Rows that shift under a still pointer while you type never take the selection.
+
 What a query finds, in order:
 
 1. **Links.** `github.com/apple`, `https://…`, and `localhost:3000` open in your browser. Only well-known endings count, so `notes.md` and `Info.plist` stay file searches.

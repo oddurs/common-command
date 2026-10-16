@@ -7,6 +7,7 @@ final class SearchModel {
     var query = "" {
         didSet {
             guard query != oldValue else { return }
+            pointerMoved = false
             update()
         }
     }
@@ -14,6 +15,9 @@ final class SearchModel {
     var selection = 0
     /// True while ⌘ is held, so each row shows its ⌘1–⌘9 shortcut.
     var showsShortcuts = false
+    /// Whether the pointer has really moved since the last key. Rows change under a still pointer while
+    /// you type, and that mustn't take the selection, or Return would open whatever happened to land there.
+    @ObservationIgnored var pointerMoved = false
 
     @ObservationIgnored var onResultsChange: (() -> Void)?
     @ObservationIgnored private let library: Library
@@ -32,8 +36,15 @@ final class SearchModel {
     var selected: Item? { results.indices.contains(selection) ? results[selection].item : nil }
 
     func move(_ delta: Int) {
+        pointerMoved = false
         guard !results.isEmpty else { return }
         selection = (selection + delta + results.count) % results.count
+    }
+
+    /// The pointer is over row `index`; it takes the selection only if the pointer got there by moving.
+    func hover(_ index: Int) {
+        guard pointerMoved, results.indices.contains(index), selection != index else { return }
+        selection = index
     }
 
     /// Recomputes from what's already known, then asks Spotlight for files. A new query selects the
