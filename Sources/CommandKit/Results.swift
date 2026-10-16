@@ -29,7 +29,15 @@ public enum Results {
                 action: .open(url))
             results.append(Ranked(item: item, score: .max))
         }
-        if options.calculator, let value = Calculator.evaluate(text, locale: options.locale) {
+        if options.calculator, let conversion = Converter.convert(text, locale: options.locale) {
+            let digits = Converter.significantDigits
+            let shown = Calculator.format(conversion.value, locale: options.locale, digits: digits)
+            let copied = Calculator.format(conversion.value, locale: options.locale, grouping: false, digits: digits)
+            let item = Item(
+                id: "convert", title: "= \(shown) \(conversion.unit)", subtitle: "Copy", kind: .calculation,
+                action: .copy(copied))
+            results.append(Ranked(item: item, score: .max))
+        } else if options.calculator, let value = Calculator.evaluate(text, locale: options.locale) {
             let shown = Calculator.format(value, locale: options.locale)
             let copied = Calculator.format(value, locale: options.locale, grouping: false)
             let item = Item(
