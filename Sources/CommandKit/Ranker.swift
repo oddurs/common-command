@@ -34,14 +34,23 @@ public enum Ranker {
                 best = match
                 bestIsTitle = index == 0
             }
-            guard let best else { continue }
-            let score = best.score + candidate.weight + usage.boost(for: candidate.item.id, key: key, at: now)
+            var matchScore = best?.score
+            var highlightsTitle = bestIsTitle
+            if !candidate.keywords.isEmpty, let keywordScore = Fuzzy.keywordScore(q, candidate.keywords),
+                keywordScore > (matchScore ?? .min)
+            {
+                matchScore = keywordScore
+                highlightsTitle = false
+            }
+            guard let matchScore else { continue }
+            let score = matchScore + candidate.weight + usage.boost(for: candidate.item.id, key: key, at: now)
             let length = candidate.names[0].keys.count
             if top.count == limit, let last = top.last, !isOrderedBefore(score, length, candidate.item, last) {
                 continue
             }
             let entry = (
-                Ranked(item: candidate.item, score: score, highlights: bestIsTitle ? best.positions : []), length
+                Ranked(item: candidate.item, score: score, highlights: highlightsTitle ? best?.positions ?? [] : []),
+                length
             )
             let index =
                 top.firstIndex { !isOrderedBefore($0.ranked.score, $0.length, $0.ranked.item, entry) } ?? top.count

@@ -18,6 +18,9 @@ public enum AppCatalog {
     /// /Applications/Adobe Photoshop/.
     static let depth = 2
 
+    /// Apps win a tie with a System Settings pane or topic: "gc" means Google Chrome before Game Center.
+    static let weight = 3
+
     public static func scan(
         roots: [URL] = standardRoots, extras: [URL] = extras, displayName: (URL) -> String = defaultDisplayName
     ) -> [Candidate] {
@@ -31,7 +34,7 @@ public enum AppCatalog {
             let item = Item(
                 id: "app:" + resolved, title: name, subtitle: "Application", kind: .application,
                 action: .open(url))
-            candidates.append(Candidate(item, alternatives: [fileName], weight: 2))
+            candidates.append(Candidate(item, alternatives: [fileName], weight: weight))
         }
         for root in roots { walk(root, depth: depth, found: add) }
         for url in extras where FileManager.default.fileExists(atPath: url.path) { add(url) }
@@ -59,33 +62,92 @@ public enum AppCatalog {
     }
 }
 
-/// The panes of System Settings, read from the extensions that provide them, so the list follows the
-/// macOS version instead of a hard-coded table.
+/// The panes of System Settings and the topics inside them, read from the extensions that provide them, so
+/// the list follows the macOS version instead of a hard-coded table. Topics and their keywords come from the
+/// same search-terms files System Settings' own search uses: "dark" finds Appearance, "low power" Battery.
 public enum SettingsPanes {
     public static let standardDirectory = URL(filePath: "/System/Library/ExtensionKit/Extensions")
 
-    public static func scan(directory: URL = standardDirectory) -> [Candidate] {
+    /// Topics rank below apps and panes with an equally good name; there are hundreds of them.
+    static let topicWeight = -12
+
+    struct Topic: Equatable {
+        var title: String
+        var keywords: [String]
+    }
+
+    /// `isPortable` hides topics that only apply to laptops, such as Low Power Mode, or only to desktops.
+    public static func scan(directory: URL = standardDirectory, isPortable: Bool) -> [Candidate] {
         let entries =
             (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        var seen: Set<String> = []
-        return entries.compactMap { url in
+        var seenNames: Set<String> = []
+        return entries.sorted { $0.path < $1.path }.flatMap { url -> [Candidate] in
             guard url.pathExtension == "appex", let bundle = Bundle(url: url), let info = bundle.infoDictionary,
                 let identifier = info["CFBundleIdentifier"] as? String,
                 let attributes = info["EXAppExtensionAttributes"] as? [String: Any],
                 attributes["EXExtensionPointIdentifier"] as? String == "com.apple.Settings.extension.ui",
                 let settings = attributes["SettingsExtensionAttributes"] as? [String: Any],
                 settings["allowsXAppleSystemPreferencesURLScheme"] as? Bool == true,
-                let name = readableName(
-                    localized: bundle.localizedInfoDictionary?["CFBundleDisplayName"] as? String,
-                    raw: info["CFBundleDisplayName"] as? String),
-                seen.insert(name).inserted,
                 let target = URL(string: "x-apple.systempreferences:" + identifier)
-            else { return nil }
+            else { return [] }
+            var name = readableName(
+                localized: bundle.localizedInfoDictionary?["CFBundleDisplayName"] as? String,
+                raw: info["CFBundleDisplayName"] as? String)
+            if let shown = name, !seenNames.insert(shown).inserted { name = nil }
+            let terms = (settings["searchTermsFileName"] as? String)
+                .flatMap { bundle.url(forResource: $0, withExtension: "searchTerms") }
+                .flatMap { NSDictionary(contentsOf: $0) as? [String: Any] }
+            // Panes drawn from an SF Symbol have a proper icon; the rest show as a generic extension.
+            let hasIcon = (info["CFBundleIcons"] as? [String: Any])?["ISGraphicIconConfiguration"] != nil
+            return candidates(
+                identifier: identifier, name: name, topics: terms.map { topics(in: $0, isPortable: isPortable) } ?? [],
+                target: target, icon: hasIcon ? url : nil)
+        }
+    }
+
+    static func topics(in terms: [String: Any], isPortable: Bool) -> [Topic] {
+        terms.keys.sorted().flatMap { section -> [Topic] in
+            let strings = (terms[section] as? [String: Any])?["localizableStrings"] as? [[String: Any]] ?? []
+            return strings.compactMap { entry in
+                guard let title = entry["title"] as? String, !title.isEmpty,
+                    !(entry["portableOnly"] as? Bool == true && !isPortable),
+                    !(entry["desktopOnly"] as? Bool == true && isPortable)
+                else { return nil }
+                let keywords = (entry["index"] as? String ?? "").split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                return Topic(title: title, keywords: keywords)
+            }
+        }
+    }
+
+    static func candidates(identifier: String, name: String?, topics: [Topic], target: URL, icon: URL?)
+        -> [Candidate]
+    {
+        let paneKey = name.map(Usage.key)
+        var paneKeywords: [String] = []
+        var seenTitles: Set<String> = []
+        var result: [Candidate] = []
+        for topic in topics {
+            let key = Usage.key(topic.title)
+            // A topic named like its pane is the pane itself; its keywords find the pane.
+            if key == paneKey {
+                paneKeywords += topic.keywords
+                continue
+            }
+            guard seenTitles.insert(key).inserted else { continue }
+            let item = Item(
+                id: "pane:\(identifier)#\(topic.title)", title: topic.title,
+                subtitle: name.map { "System Settings › \($0)" } ?? "System Settings", kind: .settings,
+                action: .open(target), iconFile: icon)
+            result.append(Candidate(item, keywords: topic.keywords, weight: topicWeight))
+        }
+        if let name {
             let item = Item(
                 id: "pane:" + identifier, title: name, subtitle: "System Settings", kind: .settings,
-                action: .open(target))
-            return Candidate(item)
+                action: .open(target), iconFile: icon)
+            result.insert(Candidate(item, keywords: paneKeywords), at: 0)
         }
+        return result
     }
 
     /// The localised name when there is one. Otherwise the raw name, unless it is an internal one like

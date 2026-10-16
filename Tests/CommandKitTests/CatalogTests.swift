@@ -64,11 +64,57 @@ import Testing
         #expect(SettingsPanes.readableName(localized: nil, raw: "Touch ID & Password") == "Touch ID & Password")
     }
 
-    @Test func findsPanesOnThisMac() {
-        let panes = SettingsPanes.scan()
+    @Test func findsPanesAndTopicsOnThisMac() {
+        let found = SettingsPanes.scan(isPortable: true)
+        let panes = found.filter { $0.item.subtitle == "System Settings" && !$0.item.id.contains("#") }
         #expect(panes.count > 10)
-        #expect(panes.allSatisfy { $0.item.kind == .settings })
-        #expect(Set(panes.map(\.item.title)).count == panes.count)
+        #expect(found.count > panes.count)
+        #expect(found.allSatisfy { $0.item.kind == .settings })
+        #expect(Set(found.map(\.item.id)).count == found.count)
+    }
+
+    let terms: [String: Any] = [
+        "Main": [
+            "localizableStrings": [
+                ["title": "Appearance", "index": "light, dark, theme, Dark Mode"],
+                ["title": "Accent color", "index": "button, selection"],
+                ["title": "Accent Color", "index": "duplicate"],
+                ["title": "Low Power Mode", "index": "save battery", "portableOnly": true],
+                ["title": "UPS", "index": "uninterruptible power", "desktopOnly": true],
+                ["index": "no title"],
+            ]
+        ]
+    ]
+    let target = URL(string: "x-apple.systempreferences:com.apple.Appearance-Settings.extension")!
+
+    @Test func topicsFollowWhetherTheMacHasABattery() {
+        #expect(SettingsPanes.topics(in: terms, isPortable: true).map(\.title).contains("Low Power Mode"))
+        #expect(!SettingsPanes.topics(in: terms, isPortable: true).map(\.title).contains("UPS"))
+        #expect(SettingsPanes.topics(in: terms, isPortable: false).map(\.title).contains("UPS"))
+        #expect(
+            SettingsPanes.topics(in: terms, isPortable: true).first?.keywords == [
+                "light", "dark", "theme", "Dark Mode",
+            ])
+    }
+
+    @Test func aTopicNamedLikeItsPaneLendsThePaneItsKeywords() {
+        let candidates = SettingsPanes.candidates(
+            identifier: "appearance", name: "Appearance", topics: SettingsPanes.topics(in: terms, isPortable: true),
+            target: target, icon: nil)
+        #expect(candidates.map(\.item.title) == ["Appearance", "Accent color", "Low Power Mode"])
+        #expect(candidates[0].item.subtitle == "System Settings")
+        #expect(candidates[1].item.subtitle == "System Settings › Appearance")
+        #expect(candidates[1].weight < candidates[0].weight)
+        #expect(Fuzzy.keywordScore(Fuzzy.prepare("dark"), candidates[0].keywords) != nil)
+    }
+
+    @Test func aPaneWithoutAReadableNameStillOffersItsTopics() {
+        let candidates = SettingsPanes.candidates(
+            identifier: "battery", name: nil,
+            topics: [.init(title: "Battery", keywords: ["charge"]), .init(title: "Low Power Mode", keywords: [])],
+            target: target, icon: nil)
+        #expect(candidates.map(\.item.title) == ["Battery", "Low Power Mode"])
+        #expect(candidates.allSatisfy { $0.item.subtitle == "System Settings" })
     }
 }
 

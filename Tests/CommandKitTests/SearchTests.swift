@@ -3,7 +3,7 @@ import Testing
 
 @testable import CommandKit
 
-func app(_ title: String, alternatives: [String] = [], weight: Int = 2) -> Candidate {
+func app(_ title: String, alternatives: [String] = [], weight: Int = AppCatalog.weight) -> Candidate {
     Candidate(
         Item(
             id: "app:" + title, title: title, subtitle: "Application", kind: .application,
@@ -117,6 +117,57 @@ func titles(_ ranked: [Ranked]) -> [String] { ranked.map(\.item.title) }
         let ranked = Ranker.rank(
             [app("Bluetooth File Exchange"), pane], query: "blue", usage: Usage(), now: now, limit: 2)
         #expect(ranked.first?.item.kind == .settings)
+    }
+}
+
+@Suite struct KeywordTests {
+    let now = Date(timeIntervalSince1970: 1_000_000)
+
+    func pane(_ title: String, keywords: [String] = [], weight: Int = 0) -> Candidate {
+        Candidate(
+            Item(
+                id: "pane:" + title, title: title, subtitle: "System Settings", kind: .settings,
+                action: .open(URL(string: "x-apple.systempreferences:x")!)),
+            keywords: keywords, weight: weight)
+    }
+
+    @Test func aKeywordFindsWhatTheNameDoesNot() {
+        let ranked = Ranker.rank(
+            [pane("Appearance", keywords: ["theme", "Dark Mode"]), app("Darkroom")], query: "dark mode", usage: Usage(),
+            now: now, limit: 2)
+        #expect(ranked.map(\.item.title) == ["Appearance"])
+        #expect(ranked.first?.highlights == [])
+    }
+
+    @Test func everyWordOfAKeywordCounts() {
+        let ranked = Ranker.rank(
+            [pane("Appearance", keywords: ["Dark Mode"])], query: "mode", usage: Usage(), now: now, limit: 1)
+        #expect(ranked.count == 1)
+    }
+
+    @Test func keywordsMatchFromTheirStartOnly() {
+        #expect(
+            Ranker.rank([pane("Appearance", keywords: ["theme"])], query: "eme", usage: Usage(), now: now, limit: 1)
+                .isEmpty)
+    }
+
+    @Test func aNameStartingWithTheQueryBeatsAKeyword() {
+        let ranked = Ranker.rank(
+            [pane("Appearance", keywords: ["display"]), pane("Displays")], query: "disp", usage: Usage(), now: now,
+            limit: 2)
+        #expect(ranked.map(\.item.title) == ["Displays", "Appearance"])
+    }
+
+    @Test func topicsStayBelowAppsTheyMerelyResemble() {
+        let topic = pane("Set time zone", weight: SettingsPanes.topicWeight)
+        let ranked = Ranker.rank([topic, app("System Settings")], query: "set", usage: Usage(), now: now, limit: 2)
+        #expect(ranked.first?.item.title == "System Settings")
+    }
+
+    @Test func anAppBeatsASettingOnATie() {
+        let ranked = Ranker.rank(
+            [pane("Game Center"), app("Google Chrome")], query: "gc", usage: Usage(), now: now, limit: 2)
+        #expect(ranked.first?.item.title == "Google Chrome")
     }
 }
 

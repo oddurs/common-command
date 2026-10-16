@@ -137,6 +137,16 @@ public enum Fuzzy {
         return Match(score: score, positions: positions)
     }
 
+    /// A keyword the query starts: below a name that starts the same way, above a scattered name match.
+    static func keywordScore(_ q: [UInt32], _ keywords: [[UInt32]]) -> Int? {
+        var best: Int?
+        for keyword in keywords where keyword.count >= q.count && keyword.starts(with: q) {
+            let score = 12 * q.count + 8 + (keyword.count == q.count ? 10 : 0)
+            best = max(best ?? score, score)
+        }
+        return best
+    }
+
     static func isSubsequence(_ q: [UInt32], of t: [UInt32]) -> Bool {
         var i = 0
         for c in t where c == q[i] {

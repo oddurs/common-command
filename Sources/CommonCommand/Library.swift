@@ -1,6 +1,7 @@
 import CommandKit
 import CoreServices
 import Foundation
+import IOKit.ps
 import os
 
 /// Everything that can be searched, and what has been chosen before.
@@ -41,7 +42,7 @@ final class Library {
         let needsPanes = panes.isEmpty
         Task {
             let (apps, panes) = await Task.detached(priority: .userInitiated) {
-                (AppCatalog.scan(), needsPanes ? SettingsPanes.scan() : [])
+                (AppCatalog.scan(), needsPanes ? SettingsPanes.scan(isPortable: Self.hasBattery) : [])
             }.value
             self.apps = apps
             // System Settings changes only with macOS, so its panes are read once per launch.
@@ -49,6 +50,18 @@ final class Library {
             scannedAt = Date()
             scanning = false
             onChange?()
+        }
+    }
+
+    /// Whether this Mac runs on a battery, so laptop-only settings such as Low Power Mode are offered only
+    /// where they exist.
+    nonisolated static var hasBattery: Bool {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+            let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef]
+        else { return false }
+        return sources.contains { source in
+            let description = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any]
+            return description?[kIOPSTypeKey] as? String == kIOPSInternalBatteryType
         }
     }
 
