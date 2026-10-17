@@ -22,6 +22,7 @@ public enum Ranker {
     ) -> [Ranked] {
         let q = Fuzzy.prepare(query)
         guard !q.isEmpty, limit > 0 else { return [] }
+        let words = Fuzzy.prepareWords(query)
         let booster = usage.booster(for: query, at: now)
         // Only the best few are ever shown, so keep those in order instead of sorting every match.
         var top: [(ranked: Ranked, name: [UInt32])] = []
@@ -30,7 +31,9 @@ public enum Ranker {
             var best: Match?
             var bestIsTitle = false
             for (index, name) in candidate.names.enumerated() {
-                guard let match = Fuzzy.match(q, in: name), match.score > (best?.score ?? .min) else { continue }
+                let found =
+                    candidate.matchesWordStarts ? Fuzzy.wordPrefixMatch(words, in: name) : Fuzzy.match(q, in: name)
+                guard let match = found, match.score > (best?.score ?? .min) else { continue }
                 best = match
                 bestIsTitle = index == 0
             }

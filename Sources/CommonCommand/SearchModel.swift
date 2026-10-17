@@ -11,6 +11,8 @@ final class SearchModel {
             update()
         }
     }
+    private(set) var sections: [ResultSection] = []
+    /// Every row in display order, which is the order the selection moves through.
     private(set) var results: [Ranked] = []
     var selection = 0
     /// True while ⌘ is held, so each row shows its ⌘1–⌘9 shortcut.
@@ -34,6 +36,11 @@ final class SearchModel {
     }
 
     var selected: Item? { results.indices.contains(selection) ? results[selection].item : nil }
+
+    /// Typed something, but nothing matched and the web search is off.
+    var showsNoResults: Bool {
+        sections.isEmpty && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     func move(_ delta: Int) {
         pointerMoved = false
@@ -72,10 +79,11 @@ final class SearchModel {
         let selectedID = keepingSelection && selection != 0 ? selected?.id : nil
         // Files from the previous keystroke stay until the new ones arrive; ranking drops those that no
         // longer match, so the list doesn't flicker.
-        results = Results.compose(
+        sections = Results.compose(
             query: query, candidates: library.candidates(includingPanes: preferences.searchesSettings),
             files: preferences.searchesFiles ? files : [], usage: library.usage, now: Date(),
             options: preferences.searchOptions)
+        results = sections.rows
         if let selectedID, let index = results.firstIndex(where: { $0.id == selectedID }) {
             selection = index
         } else {

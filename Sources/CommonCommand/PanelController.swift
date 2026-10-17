@@ -52,11 +52,14 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let library: Library
     private let panel = CommandPanel()
     private weak var field: NSTextField?
+    private var content: PanelContent?
     private var builtFor: (size: PanelSize, translucent: Bool)?
     var perform: ((Item, _ reveal: Bool) -> Void)?
 
     /// How far down the screen the panel's top edge sits: high, like Spotlight, but clear of the menu bar.
     private static let topFraction: CGFloat = 0.2
+    /// Short enough that typing straight away never waits on it.
+    private static let fadeDuration: TimeInterval = 0.12
 
     init(preferences: Preferences, library: Library) {
         self.preferences = preferences
@@ -77,7 +80,6 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     var isVisible: Bool { panel.isVisible }
-    var frame: NSRect { panel.frame }
 
     func toggle() {
         isVisible ? hide() : show()
@@ -91,7 +93,16 @@ final class PanelController: NSObject, NSWindowDelegate {
         model.pointerMoved = false
         model.update()
         position()
+        // A quick fade, as macOS shows its own panels; none at all with Reduce Motion.
+        let fades = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        panel.alphaValue = fades ? 0 : 1
         panel.makeKeyAndOrderFront(nil)
+        if fades {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Self.fadeDuration
+                panel.animator().alphaValue = 1
+            }
+        }
         refreshShadow()
         // The last query comes back selected, so typing replaces it and ↩ repeats it.
         if let field {
@@ -155,54 +166,46 @@ final class PanelController: NSObject, NSWindowDelegate {
             },
             cancel: { [weak self] in self?.hide() },
             made: { [weak self] in self?.field = $0 })
-        let hosting = NSHostingView(
-            rootView: PanelView(model: model, preferences: preferences, commands: commands) { [weak self] in
-                self?.choose($0)
-            })
-        hosting.sizingOptions = []
-        let background = Self.background(around: hosting, size: size, translucent: translucent)
-        // Clipped to the panel's shape, so the window's shadow is rounded too and not a rectangle.
-        let container = NSView()
-        container.wantsLayer = true
-        container.layer?.cornerRadius = size.cornerRadius
-        container.layer?.cornerCurve = .continuous
-        container.layer?.masksToBounds = true
-        background.autoresizingMask = [.width, .height]
-        container.addSubview(background)
-        panel.contentView = container
-        background.frame = container.bounds
+        let content = PanelContent(
+            size: size, translucent: translucent,
+            field: FieldView(model: model, preferences: preferences, commands: commands),
+            card: CardView(model: model, preferences: preferences) { [weak self] in self?.choose($0) })
+        self.content = content
+        panel.contentView = content
     }
 
-    /// Liquid Glass on macOS 26, the popover material before it, or nothing when the view draws its own
-    /// solid background.
-    private static func background(around content: NSView, size: PanelSize, translucent: Bool) -> NSView {
-        guard translucent else { return content }
-        if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView()
-            glass.cornerRadius = size.cornerRadius
-            glass.contentView = content
-            return glass
-        }
-        let effect = NSVisualEffectView()
-        effect.material = .popover
-        effect.blendingMode = .behindWindow
-        effect.state = .active
-        effect.maskImage = roundedMask(radius: size.cornerRadius)
-        content.autoresizingMask = [.width, .height]
-        effect.addSubview(content)
-        return effect
+    /// The panel as it would look now, drawn offscreen with solid surfaces, since glass only renders on
+    /// screen. For design review: nothing appears and nothing takes focus.
+    func renderOffscreen(appearance: NSAppearance?) -> NSBitmapImageRep? {
+        let size = preferences.size
+        let noop = SearchField.Commands(move: { _ in }, submit: {}, cancel: {}, made: { _ in })
+        let content = PanelContent(
+            size: size, translucent: false,
+            field: FieldView(model: model, preferences: preferences, commands: noop),
+            card: CardView(model: model, preferences: preferences) { _ in })
+        let margin: CGFloat = 24
+        let frame = NSRect(x: 0, y: 0, width: size.width + 2 * margin, height: height + 2 * margin)
+        let window = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+        let backdrop = NSView(frame: frame)
+        backdrop.wantsLayer = true
+        backdrop.layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.35).cgColor
+        content.frame = NSRect(x: margin, y: margin, width: size.width, height: height)
+        backdrop.addSubview(content)
+        window.contentView = backdrop
+        window.appearance = appearance
+        backdrop.layoutSubtreeIfNeeded()
+        backdrop.displayIfNeeded()
+        guard let rep = backdrop.bitmapImageRepForCachingDisplay(in: backdrop.bounds) else { return nil }
+        backdrop.cacheDisplay(in: backdrop.bounds, to: rep)
+        return rep
     }
 
-    private static func roundedMask(radius: CGFloat) -> NSImage {
-        let side = radius * 2 + 1
-        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
-            NSColor.black.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
-            return true
-        }
-        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
-        image.resizingMode = .stretch
-        return image
+    /// The panel's height for what the model shows now.
+    private var height: CGFloat {
+        let size = preferences.size
+        if model.showsNoResults { return size.height(rows: 1, headers: 0, visible: preferences.visibleRows) }
+        return size.height(
+            rows: model.results.count, headers: model.sections.count, visible: preferences.visibleRows)
     }
 
     /// Centred on the screen with the pointer, which is the screen you're looking at.
@@ -212,7 +215,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         let visible = screen.visibleFrame
         let top = visible.maxY - visible.height * Self.topFraction
         let size = preferences.size
-        let height = size.height(rows: model.results.count, visible: preferences.visibleRows)
+        let height = height
         panel.setFrame(
             NSRect(x: (visible.midX - size.width / 2).rounded(), y: top - height, width: size.width, height: height),
             display: false)
@@ -222,7 +225,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     private func resize() {
         guard panel.isVisible || panel.frame.width > 0 else { return }
         let size = preferences.size
-        let height = size.height(rows: model.results.count, visible: preferences.visibleRows)
+        let height = height
         guard panel.frame.height != height || panel.frame.width != size.width else { return }
         let top = panel.frame.maxY
         panel.setFrame(

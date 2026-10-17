@@ -32,7 +32,7 @@ public enum AppCatalog {
             let fileName = url.deletingPathExtension().lastPathComponent
             let name = displayName(url)
             let item = Item(
-                id: "app:" + resolved, title: name, subtitle: "Application", kind: .application,
+                id: "app:" + resolved, title: name, subtitle: "", kind: .application,
                 action: .open(url))
             candidates.append(Candidate(item, alternatives: [fileName], weight: weight))
         }
@@ -137,13 +137,14 @@ public enum SettingsPanes {
             guard seenTitles.insert(key).inserted else { continue }
             let item = Item(
                 id: "pane:\(identifier)#\(topic.title)", title: topic.title,
-                subtitle: name.map { "System Settings › \($0)" } ?? "System Settings", kind: .settings,
+                subtitle: name ?? "", kind: .settings,
                 action: .open(target), iconFile: icon)
-            result.append(Candidate(item, keywords: topic.keywords, weight: topicWeight))
+            // Hundreds of long topic names would match almost any three letters as initials.
+            result.append(Candidate(item, keywords: topic.keywords, weight: topicWeight, matchesWordStarts: true))
         }
         if let name {
             let item = Item(
-                id: "pane:" + identifier, title: name, subtitle: "System Settings", kind: .settings,
+                id: "pane:" + identifier, title: name, subtitle: "", kind: .settings,
                 action: .open(target), iconFile: icon)
             result.insert(Candidate(item, keywords: paneKeywords), at: 0)
         }

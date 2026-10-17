@@ -137,8 +137,47 @@ public enum Fuzzy {
         return Match(score: score, positions: positions)
     }
 
+    /// A stricter match for long, numerous names such as System Settings topics: each typed word must start
+    /// a word of the name, in order. "low power" finds "Low Power Mode"; "saf" doesn't find "Screen area
+    /// for display", which as initials would. Scored like a run of word-start matches.
+    public static func wordPrefixMatch(_ words: [[UInt32]], in text: SearchText) -> Match? {
+        guard !words.isEmpty else { return nil }
+        let t = text.keys
+        var cursor = 0
+        var positions: [Int] = []
+        for word in words {
+            var found: Int?
+            var start = cursor
+            while start + word.count <= t.count {
+                if text.bonus[start] > 0, t[start..<(start + word.count)].elementsEqual(word) {
+                    found = start
+                    break
+                }
+                start += 1
+            }
+            guard let found else { return nil }
+            positions += Array(found..<(found + word.count))
+            cursor = found + word.count
+        }
+        let m = positions.count
+        let starts = words.count
+        var score = matchScore * m + consecutiveBonus * (m - starts) + 9 * starts - (t.count - m) / 4
+        if positions.first == 0 { score += 1 }
+        if m == t.count { score += exactBonus }
+        return Match(score: score, positions: positions)
+    }
+
+    /// The query's words, folded, for `wordPrefixMatch`.
+    public static func prepareWords(_ query: String) -> [[UInt32]] {
+        query.split(whereSeparator: \.isWhitespace).map { $0.map(fold) }
+    }
+
+    static let minimumKeywordLength = 4
+
     /// A keyword the query starts: below a name that starts the same way, above a scattered name match.
     static func keywordScore(_ q: [UInt32], _ keywords: [[UInt32]]) -> Int? {
+        // Three letters are nearly always the start of an app's name, and hundreds of keywords would match.
+        guard q.count >= minimumKeywordLength else { return nil }
         var best: Int?
         for keyword in keywords where keyword.count >= q.count && keyword.starts(with: q) {
             let score = 12 * q.count + 8 + (keyword.count == q.count ? 10 : 0)

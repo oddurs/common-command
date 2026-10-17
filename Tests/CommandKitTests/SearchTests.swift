@@ -128,6 +128,42 @@ func titles(_ ranked: [Ranked]) -> [String] { ranked.map(\.item.title) }
     }
 }
 
+@Suite struct WordStartTests {
+    func topic(_ title: String) -> Candidate {
+        Candidate(
+            Item(
+                id: "pane:x#" + title, title: title, subtitle: "", kind: .settings,
+                action: .open(URL(string: "x-apple.systempreferences:x")!)),
+            weight: SettingsPanes.topicWeight, matchesWordStarts: true)
+    }
+
+    func ranks(_ query: String, _ title: String) -> Bool {
+        !Ranker.rank([topic(title)], query: query, usage: Usage(), now: Date(), limit: 1).isEmpty
+    }
+
+    @Test func eachWordMustStartAWordInOrder() {
+        #expect(ranks("low power", "Low Power Mode"))
+        #expect(ranks("power", "Low Power Mode"))
+        #expect(ranks("low pow", "Low Power Mode"))
+        #expect(!ranks("power low", "Low Power Mode"))
+    }
+
+    @Test func initialsAndScatteredLettersDontMatch() {
+        #expect(!ranks("saf", "Screen area for display"))
+        #expect(!ranks("lpm", "Low Power Mode"))
+        #expect(!ranks("ower", "Low Power Mode"))
+    }
+
+    @Test func highlightsTheMatchedWordStarts() {
+        let ranked = Ranker.rank([topic("Low Power Mode")], query: "low pow", usage: Usage(), now: Date(), limit: 1)
+        #expect(ranked.first?.highlights == [0, 1, 2, 4, 5, 6])
+    }
+
+    @Test func appsStillMatchByInitials() {
+        #expect(!Ranker.rank([app("Visual Studio Code")], query: "vsc", usage: Usage(), now: Date(), limit: 1).isEmpty)
+    }
+}
+
 @Suite struct KeywordTests {
     let now = Date(timeIntervalSince1970: 1_000_000)
 
@@ -151,6 +187,17 @@ func titles(_ ranked: [Ranked]) -> [String] { ranked.map(\.item.title) }
         let ranked = Ranker.rank(
             [pane("Appearance", keywords: ["Dark Mode"])], query: "mode", usage: Usage(), now: now, limit: 1)
         #expect(ranked.count == 1)
+    }
+
+    @Test func shortQueriesDontReachKeywords() {
+        // Three letters are an app's name far more often than a settings keyword.
+        #expect(
+            Ranker.rank([pane("Lockdown Mode", keywords: ["safety"])], query: "saf", usage: Usage(), now: now, limit: 1)
+                .isEmpty)
+        #expect(
+            !Ranker.rank(
+                [pane("Lockdown Mode", keywords: ["safety"])], query: "safe", usage: Usage(), now: now, limit: 1
+            ).isEmpty)
     }
 
     @Test func keywordsMatchFromTheirStartOnly() {
@@ -245,50 +292,77 @@ func titles(_ ranked: [Ranked]) -> [String] { ranked.map(\.item.title) }
         return options
     }
 
+    func compose(
+        _ query: String, _ candidates: [Candidate] = [], files: [Candidate] = [], options: SearchOptions? = nil
+    )
+        -> [ResultSection]
+    {
+        Results.compose(
+            query: query, candidates: candidates, files: files, usage: Usage(), now: now,
+            options: options ?? self.options)
+    }
+
+    func file(_ title: String, weight: Int = 0) -> Candidate {
+        Candidate(
+            Item(
+                id: "file:/x/" + title, title: title, subtitle: "~/x", kind: .file,
+                action: .open(URL(filePath: "/x/" + title))),
+            weight: weight)
+    }
+
     @Test func emptyQueryShowsNothing() {
-        #expect(
-            Results.compose(
-                query: "  ", candidates: [app("Safari")], files: [], usage: Usage(), now: now, options: options
-            ).isEmpty)
+        #expect(compose("  ", [app("Safari")]).isEmpty)
     }
 
     @Test func calculationComesFirstAndWebSearchLast() {
-        let results = Results.compose(
-            query: "2+2", candidates: [app("2+2 Game")], files: [], usage: Usage(), now: now, options: options)
-        #expect(results.map(\.item.kind) == [.calculation, .application, .webSearch])
-        #expect(results.first?.item.title == "= 4")
-        #expect(results.first?.item.action == .copy("4"))
+        let sections = compose("2+2", [app("2+2 Game")])
+        #expect(sections.map(\.title) == ["Calculator", "Top Hit", "Search the Web"])
+        #expect(sections.rows.map(\.item.kind) == [.calculation, .application, .webSearch])
+        #expect(sections.rows.first?.item.title == "4")
+        #expect(sections.rows.first?.item.action == .copy("4"))
     }
 
     @Test func copiedResultHasNoGroupingSeparator() {
-        let results = Results.compose(
-            query: "1000*1000", candidates: [], files: [], usage: Usage(), now: now, options: options)
-        #expect(results.first?.item.title == "= 1,000,000")
-        #expect(results.first?.item.action == .copy("1000000"))
+        let rows = compose("1000*1000").rows
+        #expect(rows.first?.item.title == "1,000,000")
+        #expect(rows.first?.item.action == .copy("1000000"))
     }
 
-    @Test func filesFollowApps() {
-        let file = Candidate(
+    @Test func theBestMatchIsTheTopHitAndTheRestGroupByKind() {
+        let pane = Candidate(
             Item(
-                id: "file:/x/Safari Notes.txt", title: "Safari Notes.txt", subtitle: "~/x", kind: .file,
-                action: .open(URL(filePath: "/x/Safari Notes.txt"))))
-        let results = Results.compose(
-            query: "safari", candidates: [app("Safari")], files: [file], usage: Usage(), now: now, options: options)
-        #expect(results.map(\.item.kind) == [.application, .file, .webSearch])
+                id: "pane:notes", title: "Notes settings", subtitle: "", kind: .settings,
+                action: .open(URL(string: "x-apple.systempreferences:x")!)))
+        let sections = compose("notes", [app("Notes"), app("Notesnook"), pane], files: [file("notes.txt", weight: 8)])
+        #expect(sections.map(\.title) == ["Top Hit", "Files", "Applications", "System Settings", "Search the Web"])
+        #expect(sections[0].rows.map(\.item.title) == ["Notes"])
+        #expect(sections.rows.count == 5)
+    }
+
+    @Test func groupsFollowTheirBestMember() {
+        // The file outscores the second app, so Files comes before Applications.
+        let merged = Results.merge(
+            [Ranked(item: app("A").item, score: 90), Ranked(item: app("B").item, score: 40)],
+            [Ranked(item: file("c").item, score: 60)])
+        #expect(merged.map(\.score) == [90, 60, 40])
+        #expect(Results.group(merged).map(\.title) == ["Top Hit", "Files", "Applications"])
+    }
+
+    @Test func aTieKeepsTheAppFirst() {
+        let merged = Results.merge([Ranked(item: app("A").item, score: 50)], [Ranked(item: file("b").item, score: 50)])
+        #expect(merged.map(\.item.kind) == [.application, .file])
     }
 
     @Test func turningSourcesOffRemovesThem() {
         var options = options
         options.calculator = false
         options.webSearch = false
-        #expect(
-            Results.compose(query: "2+2", candidates: [], files: [], usage: Usage(), now: now, options: options).isEmpty
-        )
+        #expect(compose("2+2", options: options).isEmpty)
     }
 
     @Test func anAddressOpensAsALink() {
-        let results = Results.compose(
-            query: "github.com", candidates: [], files: [], usage: Usage(), now: now, options: options)
-        #expect(results.first?.item.action == .open(URL(string: "https://github.com")!))
+        let sections = compose("github.com")
+        #expect(sections.first?.title == "Website")
+        #expect(sections.rows.first?.item.action == .open(URL(string: "https://github.com")!))
     }
 }
