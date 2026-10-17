@@ -1,7 +1,7 @@
 import Foundation
 
 public enum Kind: String, Sendable, Hashable {
-    case application, settings, command, file, folder, calculation, link, webSearch
+    case application, settings, command, action, file, folder, calculation, link, webSearch
 }
 
 /// What choosing a result does.
@@ -11,6 +11,11 @@ public enum Action: Sendable, Hashable {
     case copy(String)
     /// Handled by the app shell: one of its own commands, such as opening Settings.
     case command(String)
+    /// Runs one of the user's shortcuts from the Shortcuts app, by name.
+    case shortcut(String)
+    /// Quits or hides a running app, by bundle identifier.
+    case quit(String)
+    case hide(String)
 }
 
 /// One row in the results.

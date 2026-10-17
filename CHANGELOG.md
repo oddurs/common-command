@@ -21,8 +21,12 @@ All notable changes to this project are documented here. The format follows [Kee
 - Moving the pointer over a result selects it, and apps, files, and folders can be dragged out of the panel.
 - A macOS 26 look: a glass capsule for the field and a glass card for results, grouped into Top Hit, Applications, System Settings, Files, and Search the Web. A short fade on opening, none with Reduce Motion.
 - "No Results" when nothing matches and web search is off.
+- Scopes, as in Spotlight on macOS 26: ⌘1 Apps, ⌘2 Files, ⌘3 Actions, also as buttons in the field. With nothing typed, a scope lists every app and pane, recent files, or all actions.
+- Actions: run shortcuts from the Shortcuts app, and quit or hide running apps.
 
 ### Changed
+
+- ⌘1–⌘9 choose a scope instead of opening the nth result, to match Spotlight.
 
 - Rows say less: no "Application" label, a pane's name instead of "System Settings ›", and file paths keep their start and end when shortened.
 - System Settings topics match only where each typed word starts a word of the topic, and keywords only from the fourth letter, so a short query finds apps instead of a dozen loosely related settings.

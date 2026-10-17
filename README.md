@@ -39,8 +39,9 @@ Spotlight owns ⌘Space. To give it to Common Command, turn off **Show Spotlight
 | ↑ ↓, ⌃P ⌃N, Tab | Move the selection |
 | ↩ | Open the selected result, or copy a calculation |
 | ⌘↩ | Show the selected file or app in Finder |
-| ⌘1 … ⌘9 | Open a result directly; hold ⌘ to see the numbers |
-| ⎋ | Close |
+| ⌘1 ⌘2 ⌘3 | Search only Apps, Files, or Actions; press again for everything |
+| ⌫ in an empty field | Leave the scope |
+| ⎋ | Leave the scope, or close |
 
 The pointer works too: click a result to open it, move over one to select it, or drag an app, file, or folder out into the Dock, Finder, or a document. Rows that shift under a still pointer while you type never take the selection.
 
@@ -52,6 +53,11 @@ What a query finds, in order:
 3. **Apps, System Settings, and Common Command's own commands** (Settings, Quit). Settings covers each pane and the topics inside it, found by the same keywords System Settings' own search uses: "dark mode" finds Appearance, "low power" finds Low Power Mode, "firewall" finds the firewall switch. Panes show their own icons. Laptop-only settings appear only on laptops.
 4. **Files and folders** in your home folder whose name has a word starting with each word you typed. Build output, caches, and dot-folders are left out, and files you've opened recently rank higher.
 5. **A web search** with your chosen engine: Google, DuckDuckGo, Bing, Kagi, Ecosia, or Startpage.
+6. **Actions**: your shortcuts from the Shortcuts app, and Quit or Hide for each running app ("quit saf"). They rank below apps, so a name you type still means the app.
+
+### Scopes
+
+As in Spotlight on macOS 26, ⌘1, ⌘2, and ⌘3 (or the buttons at the end of the field) narrow the search to Apps, Files, or Actions. With nothing typed, a scope lists what it holds: every app and System Settings pane from A to Z, the files you opened in the last month, or your shortcuts and running apps. A scope searches its kind even if Settings leaves it out of everything else.
 
 Each of these except apps can be turned off in Settings. The last query comes back selected when you reopen the panel, so typing replaces it and Return repeats it.
 

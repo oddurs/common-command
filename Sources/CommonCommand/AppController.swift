@@ -143,6 +143,43 @@ final class AppController: NSObject {
             NSApp.terminate(nil)
         case .command:
             break
+        case .shortcut(let name):
+            runShortcut(name)
+        case .quit(let id):
+            NSRunningApplication.runningApplications(withBundleIdentifier: id).forEach { $0.terminate() }
+        case .hide(let id):
+            NSRunningApplication.runningApplications(withBundleIdentifier: id).forEach { $0.hide() }
+        }
+    }
+
+    /// Runs a shortcut through the `shortcuts` tool, off the main thread: some take a while, and the panel
+    /// is already closed. A failure is reported, since nothing else would show it.
+    private func runShortcut(_ name: String) {
+        Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(filePath: "/usr/bin/shortcuts")
+            process.arguments = ["run", name]
+            let errors = Pipe()
+            process.standardError = errors
+            do {
+                try process.run()
+                process.waitUntilExit()
+            } catch {
+                await MainActor.run { Self.present(error) }
+                return
+            }
+            guard process.terminationStatus != 0 else { return }
+            let message = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            await MainActor.run {
+                Self.present(
+                    CocoaError(
+                        .featureUnsupported,
+                        userInfo: [
+                            NSLocalizedDescriptionKey: "The shortcut “\(name)” didn't finish.",
+                            NSLocalizedRecoverySuggestionErrorKey: message.trimmingCharacters(
+                                in: .whitespacesAndNewlines),
+                        ]))
+            }
         }
     }
 

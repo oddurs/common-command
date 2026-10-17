@@ -12,15 +12,47 @@ struct FieldView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
+            Image(systemName: model.scope.symbol)
                 .font(.system(size: size.fieldFontSize * 0.82, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(model.scope == .all ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tint))
+                .frame(width: size.fieldFontSize * 1.1)
             SearchField(model: model, fontSize: size.fieldFontSize, commands: commands)
+            ScopeButtons(model: model, size: size, toggle: commands.toggleScope)
         }
         .padding(.leading, size.fieldHeight * 0.36)
         .padding(.trailing, size.fieldHeight * 0.3)
         .frame(width: size.width, height: size.fieldHeight)
         .surface(radius: size.fieldRadius, solid: !preferences.translucent)
+    }
+}
+
+/// Apps, Files, and Actions, as in Spotlight on macOS 26: a click or ⌘1–⌘3 narrows the search to one
+/// kind, and with nothing typed lists what that kind holds.
+private struct ScopeButtons: View {
+    let model: SearchModel
+    let size: PanelSize
+    let toggle: (Scope) -> Void
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(Scope.scoped) { scope in
+                let isOn = model.scope == scope
+                Button {
+                    toggle(scope)
+                } label: {
+                    Image(systemName: scope.symbol)
+                        .font(.system(size: size.fieldFontSize * 0.62, weight: .medium))
+                        .foregroundStyle(isOn ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+                        .frame(width: size.fieldHeight * 0.62, height: size.fieldHeight * 0.62)
+                        .background(Circle().fill(isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.clear)))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("\(scope.name) (⌘\(scope.key.map(String.init) ?? ""))")
+                .accessibilityLabel(scope.name)
+                .accessibilityAddTraits(isOn ? .isSelected : [])
+            }
+        }
     }
 }
 
@@ -46,16 +78,13 @@ struct CardView: View {
                         SectionHeader(title: entry.section.title, size: size)
                         ForEach(Array(entry.section.rows.enumerated()), id: \.element.id) { offset, ranked in
                             let index = entry.start + offset
-                            ResultRow(
-                                ranked: ranked, size: size, isSelected: index == model.selection,
-                                shortcut: model.showsShortcuts && index < 9 ? "⌘\(index + 1)" : nil
-                            )
-                            .id(index)
-                            .onTapGesture { choose(index) }
-                            .onContinuousHover { phase in
-                                if case .active = phase { model.hover(index) }
-                            }
-                            .dragsFile(ranked.item.fileURL)
+                            ResultRow(ranked: ranked, size: size, isSelected: index == model.selection)
+                                .id(index)
+                                .onTapGesture { choose(index) }
+                                .onContinuousHover { phase in
+                                    if case .active = phase { model.hover(index) }
+                                }
+                                .dragsFile(ranked.item.fileURL)
                         }
                     }
                 }
@@ -124,7 +153,6 @@ private struct ResultRow: View {
     let ranked: Ranked
     let size: PanelSize
     let isSelected: Bool
-    let shortcut: String?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -133,7 +161,7 @@ private struct ResultRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 16)
-            Text(shortcut ?? ranked.item.subtitle)
+            Text(ranked.item.subtitle)
                 .font(.system(size: size.rowFontSize - 2))
                 .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.8)) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
@@ -208,6 +236,7 @@ final class Icons {
             guard let path = item.iconFile?.path else { return settingsIcon }
             return cached(path)
         case .command: return NSApp.applicationIconImage
+        case .action: return item.iconFile.map { cached($0.path) }
         case .calculation, .link, .webSearch: return nil
         }
     }
@@ -239,6 +268,9 @@ struct SearchField: NSViewRepresentable {
         var move: (Int) -> Void
         var submit: () -> Void
         var cancel: () -> Void
+        /// ⌫ in an empty field leaves the scope; returns whether there was one to leave.
+        var leaveScope: () -> Bool
+        var toggleScope: (Scope) -> Void
         var made: (NSTextField) -> Void
     }
 
@@ -261,6 +293,8 @@ struct SearchField: NSViewRepresentable {
         let font = NSFont.systemFont(ofSize: fontSize, weight: .regular)
         if field.font != font { field.font = font }
         if field.stringValue != model.query { field.stringValue = model.query }
+        let placeholder = model.scope == .all ? "Search" : "Search \(model.scope.name)"
+        if field.placeholderString != placeholder { field.placeholderString = placeholder }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
@@ -282,6 +316,8 @@ struct SearchField: NSViewRepresentable {
             case #selector(NSResponder.insertBacktab(_:)): parent.commands.move(-1)
             case #selector(NSResponder.insertNewline(_:)): parent.commands.submit()
             case #selector(NSResponder.cancelOperation(_:)): parent.commands.cancel()
+            case #selector(NSResponder.deleteBackward(_:)) where textView.string.isEmpty:
+                return parent.commands.leaveScope()
             default: return false
             }
             return true

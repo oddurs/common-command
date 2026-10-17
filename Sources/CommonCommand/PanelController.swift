@@ -6,7 +6,6 @@ import SwiftUI
 /// frontmost, its menu bar stays put, and closing the panel returns you to it with nothing to restore.
 final class CommandPanel: NSPanel {
     var onKeyEquivalent: ((NSEvent) -> Bool)?
-    var onModifiersChange: ((NSEvent.ModifierFlags) -> Void)?
     var onPointerMove: (() -> Void)?
 
     init() {
@@ -35,12 +34,8 @@ final class CommandPanel: NSPanel {
     }
 
     override func sendEvent(_ event: NSEvent) {
-        switch event.type {
-        case .flagsChanged: onModifiersChange?(event.modifierFlags)
         // Before the event reaches the rows' hover tracking, so they know the pointer really moved.
-        case .mouseMoved: onPointerMove?()
-        default: break
-        }
+        if event.type == .mouseMoved { onPointerMove?() }
         super.sendEvent(event)
     }
 }
@@ -68,9 +63,6 @@ final class PanelController: NSObject, NSWindowDelegate {
         super.init()
         panel.delegate = self
         panel.onKeyEquivalent = { [weak self] in self?.keyEquivalent($0) ?? false }
-        panel.onModifiersChange = { [weak self] flags in
-            self?.model.showsShortcuts = flags.intersection(.deviceIndependentFlagsMask) == .command
-        }
         panel.onPointerMove = { [weak self] in self?.model.pointerMoved = true }
         model.onResultsChange = { [weak self] in self?.resize() }
         library.onChange = { [weak self] in
@@ -89,7 +81,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         library.refreshIfStale()
         buildContentIfNeeded()
         panel.appearance = preferences.theme.appearance
-        model.showsShortcuts = false
+        library.refreshRunningApps()
+        model.scope = .all
         model.pointerMoved = false
         model.update()
         position()
@@ -143,11 +136,30 @@ final class PanelController: NSObject, NSWindowDelegate {
             choose(model.selection, reveal: true)
             return true
         }
-        if let digit = Int(key), (1...9).contains(digit) {
-            choose(digit - 1)
+        // ⌘1, ⌘2, ⌘3 choose Apps, Files, or Actions, and pressing it again goes back to everything.
+        if let scope = Scope.scoped.first(where: { $0.key == key.first }) {
+            toggle(scope)
             return true
         }
         return false
+    }
+
+    /// What `show()` reads fresh, without showing anything.
+    func prepareForSnapshot() {
+        library.refreshRunningApps()
+    }
+
+    func toggle(_ scope: Scope) {
+        model.scope = model.scope == scope ? .all : scope
+    }
+
+    /// Escape leaves a scope first, like deleting a search token, and closes the panel after that.
+    private func cancel() {
+        if model.scope != .all {
+            model.scope = .all
+        } else {
+            hide()
+        }
     }
 
     // MARK: Layout
@@ -164,7 +176,13 @@ final class PanelController: NSObject, NSWindowDelegate {
                 guard let self else { return }
                 choose(model.selection)
             },
-            cancel: { [weak self] in self?.hide() },
+            cancel: { [weak self] in self?.cancel() },
+            leaveScope: { [weak self] in
+                guard let self, model.scope != .all else { return false }
+                model.scope = .all
+                return true
+            },
+            toggleScope: { [weak self] in self?.toggle($0) },
             made: { [weak self] in self?.field = $0 })
         let content = PanelContent(
             size: size, translucent: translucent,
@@ -178,7 +196,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// screen. For design review: nothing appears and nothing takes focus.
     func renderOffscreen(appearance: NSAppearance?) -> NSBitmapImageRep? {
         let size = preferences.size
-        let noop = SearchField.Commands(move: { _ in }, submit: {}, cancel: {}, made: { _ in })
+        let noop = SearchField.Commands(
+            move: { _ in }, submit: {}, cancel: {}, leaveScope: { false }, toggleScope: { _ in }, made: { _ in })
         let content = PanelContent(
             size: size, translucent: false,
             field: FieldView(model: model, preferences: preferences, commands: noop),

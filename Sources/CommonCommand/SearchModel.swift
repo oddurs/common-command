@@ -15,8 +15,15 @@ final class SearchModel {
     /// Every row in display order, which is the order the selection moves through.
     private(set) var results: [Ranked] = []
     var selection = 0
-    /// True while ⌘ is held, so each row shows its ⌘1–⌘9 shortcut.
-    var showsShortcuts = false
+    /// Everything, or only apps, files, or actions. With nothing typed, a scope lists what it holds.
+    var scope = Scope.all {
+        didSet {
+            guard scope != oldValue else { return }
+            pointerMoved = false
+            files = []
+            update()
+        }
+    }
     /// Whether the pointer has really moved since the last key. Rows change under a still pointer while
     /// you type, and that mustn't take the selection, or Return would open whatever happened to land there.
     @ObservationIgnored var pointerMoved = false
@@ -37,9 +44,14 @@ final class SearchModel {
 
     var selected: Item? { results.indices.contains(selection) ? results[selection].item : nil }
 
-    /// Typed something, but nothing matched and the web search is off.
+    /// Typed something, or chose a scope, and nothing is there.
     var showsNoResults: Bool {
-        sections.isEmpty && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        sections.isEmpty && (scope != .all || !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    /// Whether files belong in what's shown now: in Everything if Settings says so, and always in Files.
+    private var includesFiles: Bool {
+        scope == .files || (scope == .all && preferences.searchesFiles)
     }
 
     func move(_ delta: Int) {
@@ -61,14 +73,17 @@ final class SearchModel {
         compose(keepingSelection: keepingSelection)
         fileTask?.cancel()
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard preferences.searchesFiles, !text.isEmpty else {
+        // Nothing typed in Files lists recent files; otherwise nothing typed needs no files.
+        guard includesFiles, !text.isEmpty || scope == .files else {
             files = []
             return
         }
         fileTask = Task {
             try? await Task.sleep(for: Self.fileDelay)
             guard !Task.isCancelled else { return }
-            let found = await Task.detached(priority: .userInitiated) { FileSearch.run(text) }.value
+            let found = await Task.detached(priority: .userInitiated) {
+                text.isEmpty ? FileSearch.recent() : FileSearch.run(text)
+            }.value
             guard !Task.isCancelled else { return }
             files = found
             compose(keepingSelection: true)
@@ -79,10 +94,15 @@ final class SearchModel {
         let selectedID = keepingSelection && selection != 0 ? selected?.id : nil
         // Files from the previous keystroke stay until the new ones arrive; ranking drops those that no
         // longer match, so the list doesn't flicker.
+        var options = preferences.searchOptions
+        options.scope = scope
+        // A scope chosen on purpose shows its kind even if Settings leaves it out of Everything.
+        let candidates = library.candidates(
+            includingPanes: preferences.searchesSettings || scope == .apps,
+            includingActions: preferences.searchesActions || scope == .actions)
         sections = Results.compose(
-            query: query, candidates: library.candidates(includingPanes: preferences.searchesSettings),
-            files: preferences.searchesFiles ? files : [], usage: library.usage, now: Date(),
-            options: preferences.searchOptions)
+            query: query, candidates: candidates, files: includesFiles ? files : [], usage: library.usage, now: Date(),
+            options: options)
         results = sections.rows
         if let selectedID, let index = results.firstIndex(where: { $0.id == selectedID }) {
             selection = index
