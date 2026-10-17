@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// The Common Tools family: Common Stats, Common Keys, Common Bar, Common Glyph, and Common Command. This file is
-/// identical in every app, so each Settings window ends the same way; change it in all of them together.
+/// The Common Tools family. This file is identical in every app, so each Settings window ends the same
+/// way. It comes from the app standard in oddurs/common-tools: change it there, not here.
 struct CommonTool: Identifiable {
     let id: String
     let name: String
@@ -17,7 +17,7 @@ struct CommonTool: Identifiable {
             id: "keys", name: "Common Keys", summary: "Fixes words typed on the wrong keyboard",
             bundleIdentifier: "com.oddurs.langsmart"),
         CommonTool(
-            id: "bar", name: "Common Bar", summary: "Hides menu bar icons behind one line",
+            id: "bar", name: "Common Bar", summary: "Hides the menu bar icons you rarely use",
             bundleIdentifier: "com.oddurs.reasonal"),
         CommonTool(
             id: "glyph", name: "Common Glyph", summary: "Your own image in the menu bar",
@@ -25,6 +25,12 @@ struct CommonTool: Identifiable {
         CommonTool(
             id: "command", name: "Common Command", summary: "Opens apps, files, and settings from the keyboard",
             bundleIdentifier: "com.oddurs.commoncommand"),
+        CommonTool(
+            id: "shot", name: "Common Shot", summary: "Screenshots straight to the clipboard",
+            bundleIdentifier: "com.oddurs.commonshot"),
+        CommonTool(
+            id: "battery", name: "Common Battery", summary: "The battery in the menu bar, with alerts",
+            bundleIdentifier: "com.oddurs.commonbattery"),
     ]
 
     static let website = URL(string: "https://oddurs.github.io/common-tools/")!

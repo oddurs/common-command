@@ -1,7 +1,7 @@
 // Renders Resources/AppIcon.icns and docs/icon.png. Run: swift scripts/make-icon.swift
 //
 // The Common Tools icon family: a blue squircle with a frosted glass glyph. Only the glyph differs
-// between the apps; keep the rest identical across their repos.
+// between Common Stats, Common Keys, and Common Bar; keep the rest identical across the three repos.
 import AppKit
 
 // Shared look: Apple's 824 pt squircle on a 1024 canvas, a blue gradient body, and a frosted
@@ -111,6 +111,7 @@ func rounded(_ r: CGRect, _ radius: CGFloat) -> CGPath {
 
 // MARK: - Glyph
 
+// standard:begin glyph
 func glyph(_ ctx: CGContext) {
     // A search field: one line of glass, and the ⌘ that opens it.
     let panel = CGRect(x: 212, y: 292, width: 600, height: 440)
@@ -129,6 +130,7 @@ func glyph(_ ctx: CGContext) {
         ctx.fillPath()
     }
 }
+// standard:end glyph
 
 func render(_ px: Int, _ glyph: (CGContext) -> Void) -> Data {
     let rep = NSBitmapImageRep(
@@ -153,8 +155,6 @@ for size in [16, 32, 128, 256, 512] {
     try render(size * 2, glyph).write(to: iconset.appendingPathComponent("icon_\(size)x\(size)@2x.png"))
 }
 try render(256, glyph).write(to: root.appendingPathComponent("docs/icon.png"))
-// Every Common Tools app ships each family member's icon at this size for its Settings window.
-try render(128, glyph).write(to: root.appendingPathComponent("Resources/CommonTools/command.png"))
 let iconutil = Process()
 iconutil.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
 iconutil.arguments = ["-c", "icns", iconset.path, "-o", root.appendingPathComponent("Resources/AppIcon.icns").path]
