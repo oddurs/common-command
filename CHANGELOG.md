@@ -26,6 +26,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - A live preview of the panel at the top of Settings.
 - A warning in Settings and the menu bar menu when the shortcut is also Spotlight's or Alfred's, saying where to change theirs. macOS accepts both without an error, so the clash was silent.
 - VoiceOver reads the selected result as it changes.
+- An action menu on ⌘K or a right-click, with Show in Finder, Quick Look, Copy Path, and Hide or Quit for running apps. ⌘Y opens Quick Look and ⌘⇧C copies directly.
 
 ### Changed
 

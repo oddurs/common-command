@@ -1,5 +1,6 @@
 import AppKit
 import CommandKit
+import QuickLookUI
 import SwiftUI
 
 /// A borderless panel that takes typing without activating the app, so the app you were in stays
@@ -29,6 +30,31 @@ final class CommandPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    // MARK: Quick Look
+
+    /// The file Quick Look shows: the selected result's.
+    var previewURL: (() -> URL?)?
+    /// Keys pressed while Quick Look has focus; arrows still move the selection, as in Finder.
+    var onPreviewKey: ((NSEvent) -> Bool)?
+
+    override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
+
+    override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = self
+            panel.delegate = self
+        }
+    }
+
+    override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated {
+            panel.dataSource = nil
+            panel.delegate = nil
+            // Escape in Quick Look closes only the preview; typing carries on in the field.
+            if isVisible { makeKey() }
+        }
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         onKeyEquivalent?(event) == true || super.performKeyEquivalent(with: event)
     }
@@ -37,6 +63,22 @@ final class CommandPanel: NSPanel {
         // Before the event reaches the rows' hover tracking, so they know the pointer really moved.
         if event.type == .mouseMoved { onPointerMove?() }
         super.sendEvent(event)
+    }
+}
+
+// Quick Look calls these on the main thread; its protocols just predate saying so.
+extension CommandPanel: @preconcurrency QLPreviewPanelDataSource, @preconcurrency QLPreviewPanelDelegate {
+    func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {
+        previewURL?() == nil ? 0 : 1
+    }
+
+    func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> (any QLPreviewItem)! {
+        previewURL?() as NSURL?
+    }
+
+    func previewPanel(_ panel: QLPreviewPanel!, handle event: NSEvent!) -> Bool {
+        guard let event, event.type == .keyDown else { return false }
+        return onPreviewKey?(event) ?? false
     }
 }
 
@@ -64,6 +106,13 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.delegate = self
         panel.onKeyEquivalent = { [weak self] in self?.keyEquivalent($0) ?? false }
         panel.onPointerMove = { [weak self] in self?.model.pointerMoved = true }
+        panel.previewURL = { [weak self] in self?.model.selected?.fileURL }
+        panel.onPreviewKey = { [weak self] event in
+            guard let self, event.keyCode == 125 || event.keyCode == 126 else { return false }
+            model.move(event.keyCode == 125 ? 1 : -1)
+            QLPreviewPanel.shared().reloadData()
+            return true
+        }
         model.onResultsChange = { [weak self] in self?.resize() }
         library.onChange = { [weak self] in
             guard let self, panel.isVisible else { return }
@@ -78,6 +127,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func show() {
+        // After a preview the app hid itself to hand focus back; its windows can't show until it unhides.
+        if NSApp.isHidden { NSApp.unhideWithoutActivation() }
         library.refreshIfStale()
         buildContentIfNeeded()
         panel.appearance = preferences.theme.appearance
@@ -105,11 +156,40 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func hide() {
+        if previewing { QLPreviewPanel.shared().orderOut(nil) }
         panel.orderOut(nil)
+        // Quick Look's panel activates the app, which the launcher otherwise never does. Hiding hands focus
+        // back to the app you were in, unless a window of ours, such as Settings, is still open.
+        if previewedSinceShown {
+            previewedSinceShown = false
+            let othersOpen = NSApp.windows.contains { $0.isVisible && $0 !== panel && !($0 is QLPreviewPanel) }
+            if NSApp.isActive && !othersOpen { NSApp.hide(nil) }
+        }
+    }
+
+    private var previewedSinceShown = false
+
+    /// Quick Look takes focus from the panel while it shows; that's the one time losing focus doesn't close.
+    private var previewing: Bool {
+        QLPreviewPanel.sharedPreviewPanelExists() && QLPreviewPanel.shared().isVisible
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        hide()
+        // Checked a moment later: Quick Look takes focus before it reports itself visible.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !panel.isKeyWindow, !previewing else { return }
+            hide()
+        }
+    }
+
+    private func toggleQuickLook() {
+        if previewing {
+            QLPreviewPanel.shared().orderOut(nil)
+            panel.makeKey()
+        } else if model.selected?.fileURL != nil {
+            previewedSinceShown = true
+            QLPreviewPanel.shared().makeKeyAndOrderFront(nil)
+        }
     }
 
     func preferencesChanged() {
@@ -129,9 +209,86 @@ final class PanelController: NSObject, NSWindowDelegate {
         perform?(item, reveal)
     }
 
+    // MARK: Commands
+
+    /// What the action menu offers for the result at `index`.
+    func commands(for item: Item) -> [ItemCommand] {
+        let isRunning =
+            item.kind == .application
+            && NSWorkspace.shared.runningApplications.contains {
+                $0.bundleURL?.standardizedFileURL == item.fileURL?.standardizedFileURL
+            }
+        return ItemCommand.commands(for: item, isRunning: isRunning)
+    }
+
+    func run(_ command: ItemCommand, on index: Int) {
+        guard model.results.indices.contains(index) else { return }
+        let item = model.results[index].item
+        switch command {
+        case .open: choose(index)
+        case .showInFinder: choose(index, reveal: true)
+        case .quickLook:
+            model.selection = index
+            toggleQuickLook()
+        case .copyPath:
+            guard let url = item.fileURL else { return }
+            copy(url.path, url: url)
+        case .copyText(let text): copy(text, url: nil)
+        case .quit, .hide:
+            let apps = NSWorkspace.shared.runningApplications.filter {
+                $0.bundleURL?.standardizedFileURL == item.fileURL?.standardizedFileURL
+            }
+            hide()
+            for app in apps {
+                if command == .quit { app.terminate() } else { app.hide() }
+            }
+        }
+    }
+
+    /// Copies, and closes the panel the way Return does after a calculation.
+    private func copy(_ text: String, url: URL?) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        // A file goes on as a file too, so pasting into Finder or Mail attaches it.
+        if let url { pasteboard.writeObjects([url as NSURL]) }
+        pasteboard.setString(text, forType: .string)
+        hide()
+    }
+
+    /// ⌘K: the action menu for the selected result, opened under the field like a pull-down.
+    private func showActionMenu() {
+        guard let item = model.selected, let content = panel.contentView else { return }
+        let index = model.selection
+        let menu = NSMenu()
+        for command in commands(for: item) {
+            let entry = ActionMenuItem(command: command) { [weak self] in self?.run(command, on: index) }
+            menu.addItem(entry)
+        }
+        let size = preferences.size
+        menu.popUp(
+            positioning: menu.items.first,
+            at: NSPoint(x: size.width - size.fieldHeight * 2.4, y: size.fieldHeight + size.gap), in: content)
+    }
+
     private func keyEquivalent(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        guard flags == .command, let key = event.charactersIgnoringModifiers else { return false }
+        guard let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
+        if flags == [.command, .shift], key == "c", let item = model.selected {
+            if let copy = commands(for: item).first(where: { if case .copyText = $0 { true } else { $0 == .copyPath } })
+            {
+                run(copy, on: model.selection)
+            }
+            return true
+        }
+        guard flags == .command else { return false }
+        if key == "k" {
+            showActionMenu()
+            return true
+        }
+        if key == "y" {
+            toggleQuickLook()
+            return true
+        }
         if key == "\r" {
             choose(model.selection, reveal: true)
             return true
@@ -187,7 +344,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         let content = PanelContent(
             size: size, translucent: translucent,
             field: FieldView(model: model, preferences: preferences, commands: commands),
-            card: CardView(model: model, preferences: preferences) { [weak self] in self?.choose($0) })
+            card: CardView(
+                model: model, preferences: preferences, choose: { [weak self] in self?.choose($0) },
+                commands: { [weak self] in self?.commands(for: $0) ?? [] },
+                run: { [weak self] in self?.run($0, on: $1) }))
         self.content = content
         panel.contentView = content
     }

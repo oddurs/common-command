@@ -61,6 +61,9 @@ struct CardView: View {
     let model: SearchModel
     let preferences: Preferences
     let choose: (Int) -> Void
+    /// The action menu's commands for a result, and running one; a right-click shows the same menu as ⌘K.
+    var commands: (Item) -> [ItemCommand] = { _ in [] }
+    var run: (ItemCommand, Int) -> Void = { _, _ in }
 
     private var size: PanelSize { preferences.size }
 
@@ -85,6 +88,11 @@ struct CardView: View {
                                     if case .active = phase { model.hover(index) }
                                 }
                                 .dragsFile(ranked.item.fileURL)
+                                .contextMenu {
+                                    ForEach(Array(commands(ranked.item).enumerated()), id: \.offset) { _, command in
+                                        Button(command.title, systemImage: command.symbol) { run(command, index) }
+                                    }
+                                }
                         }
                     }
                 }
