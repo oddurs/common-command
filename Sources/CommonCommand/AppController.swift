@@ -10,10 +10,18 @@ final class AppController: NSObject {
     let preferences: Preferences
     private let library = Library()
     private let hotKey = HotKey()
-    private lazy var panel = PanelController(preferences: preferences, library: library)
+    private(set) lazy var panel = PanelController(preferences: preferences, library: library)
     private lazy var settings = SettingsWindow(controller: self)
     private var statusItem: NSStatusItem?
     private(set) var hotKeyProblem: String?
+    /// Spotlight's and Alfred's shortcuts, read when the shortcut is set and when Settings opens.
+    private(set) var otherShortcuts: [Conflicts.Holder] = []
+
+    /// Another app that also answers to our shortcut. macOS accepts both without complaint, and then only
+    /// one of them opens.
+    var hotKeyConflict: Conflicts.Holder? {
+        Conflicts.holder(of: preferences.hotKey, among: otherShortcuts)
+    }
 
     init(snapshot: Snapshot.Request? = nil) {
         // A snapshot mustn't change the real settings.
@@ -33,7 +41,7 @@ final class AppController: NSObject {
         panel.perform = { [weak self] item, reveal in self?.perform(item, reveal: reveal) }
         hotKey.onPress = { [weak self] in self?.panel.toggle() }
         if let snapshot {
-            Snapshot.run(snapshot, panel: panel, preferences: preferences)
+            Snapshot.run(snapshot, controller: self)
             return
         }
         registerHotKey()
@@ -49,7 +57,12 @@ final class AppController: NSObject {
 
     // MARK: Shortcut
 
+    func refreshOtherShortcuts() {
+        otherShortcuts = otherAppsShortcuts()
+    }
+
     func registerHotKey() {
+        refreshOtherShortcuts()
         do {
             try hotKey.register(preferences.hotKey)
             hotKeyProblem = nil
@@ -67,6 +80,8 @@ final class AppController: NSObject {
     // MARK: Settings
 
     @objc func showSettings() {
+        // Spotlight's or Alfred's shortcut may have changed since; the warning in Settings should be current.
+        refreshOtherShortcuts()
         panel.hide()
         settings.show()
     }
@@ -97,7 +112,14 @@ final class AppController: NSObject {
         let open = NSMenuItem(title: "Open Common Command", action: #selector(showPanel), keyEquivalent: "")
         open.target = self
         menu.addItem(open)
-        if let hotKeyProblem {
+        if let conflict = hotKeyConflict {
+            let problem = NSMenuItem(
+                title: "\(preferences.hotKey.displayName) also opens \(conflict.owner)",
+                action: #selector(showSettings),
+                keyEquivalent: "")
+            problem.target = self
+            menu.addItem(problem)
+        } else if let hotKeyProblem {
             let problem = NSMenuItem(title: hotKeyProblem, action: nil, keyEquivalent: "")
             problem.isEnabled = false
             menu.addItem(problem)

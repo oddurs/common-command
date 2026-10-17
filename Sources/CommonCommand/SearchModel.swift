@@ -1,5 +1,5 @@
+import AppKit
 import CommandKit
-import Foundation
 
 /// The query, its results, and which one is selected.
 @MainActor @Observable
@@ -14,7 +14,9 @@ final class SearchModel {
     private(set) var sections: [ResultSection] = []
     /// Every row in display order, which is the order the selection moves through.
     private(set) var results: [Ranked] = []
-    var selection = 0
+    var selection = 0 {
+        didSet { announceSelection() }
+    }
     /// Everything, or only apps, files, or actions. With nothing typed, a scope lists what it holds.
     var scope = Scope.all {
         didSet {
@@ -110,5 +112,20 @@ final class SearchModel {
             selection = 0
         }
         onResultsChange?()
+        announceSelection()
+    }
+
+    @ObservationIgnored private var announcedID: String?
+
+    /// VoiceOver reads the selected result whenever it changes, by key or because typing changed the top
+    /// result, so the list can be used without looking at it.
+    private func announceSelection() {
+        guard NSWorkspace.shared.isVoiceOverEnabled, let item = selected, item.id != announcedID else { return }
+        announcedID = item.id
+        let section = sections.first { $0.rows.contains { $0.id == item.id } }?.title
+        let words = [item.title, item.subtitle, section ?? ""].filter { !$0.isEmpty }.joined(separator: ", ")
+        NSAccessibility.post(
+            element: NSApp as Any, notification: .announcementRequested,
+            userInfo: [.announcement: words, .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 }

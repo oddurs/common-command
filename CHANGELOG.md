@@ -23,6 +23,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - "No Results" when nothing matches and web search is off.
 - Scopes, as in Spotlight on macOS 26: ⌘1 Apps, ⌘2 Files, ⌘3 Actions, also as buttons in the field. With nothing typed, a scope lists every app and pane, recent files, or all actions.
 - Actions: run shortcuts from the Shortcuts app, and quit or hide running apps.
+- A live preview of the panel at the top of Settings.
+- A warning in Settings and the menu bar menu when the shortcut is also Spotlight's or Alfred's, saying where to change theirs. macOS accepts both without an error, so the clash was silent.
+- VoiceOver reads the selected result as it changes.
 
 ### Changed
 
