@@ -219,6 +219,34 @@ final class PanelController: NSObject, NSWindowDelegate {
         return rep
     }
 
+    /// A second model for the preview in Settings, searching "s" so it shows a few sections.
+    private(set) lazy var previewModel: SearchModel = {
+        let model = SearchModel(library: library, preferences: preferences)
+        model.query = "s"
+        return model
+    }()
+
+    /// The panel as it looks with the current settings, for Settings to show. It doesn't take input.
+    func makePreview() -> PanelContent {
+        let noop = SearchField.Commands(
+            move: { _ in }, submit: {}, cancel: {}, leaveScope: { false }, toggleScope: { _ in },
+            made: { field in
+                field.isEditable = false
+                field.isSelectable = false
+                field.refusesFirstResponder = true
+            })
+        return PanelContent(
+            size: preferences.size, translucent: preferences.translucent,
+            field: FieldView(model: previewModel, preferences: preferences, commands: noop),
+            card: CardView(model: previewModel, preferences: preferences) { _ in })
+    }
+
+    func previewHeight() -> CGFloat {
+        let size = preferences.size
+        return size.height(
+            rows: previewModel.results.count, headers: previewModel.sections.count, visible: preferences.visibleRows)
+    }
+
     /// The panel's height for what the model shows now.
     private var height: CGFloat {
         let size = preferences.size

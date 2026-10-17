@@ -29,7 +29,7 @@ Requires macOS 14 or later.
 
 ### Using ⌘Space
 
-Spotlight owns ⌘Space. To give it to Common Command, turn off **Show Spotlight search** in **System Settings › Keyboard › Keyboard Shortcuts › Spotlight**, then record ⌘Space in Common Command's Settings. Settings has a button that opens the right page.
+Spotlight owns ⌘Space on a new Mac, and launchers such as Alfred often take it. macOS lets two apps register the same shortcut without an error, and then only one of them opens, so Common Command reads Spotlight's and Alfred's shortcuts and tells you in Settings and the menu bar menu when yours clashes, and where to change theirs. To use ⌘Space, turn off **Show Spotlight search** in **System Settings › Keyboard › Keyboard Shortcuts › Spotlight** (or change Alfred's hotkey in **Alfred Preferences › General**), then record ⌘Space in Common Command's Settings.
 
 ## Usage
 
@@ -64,7 +64,7 @@ Each of these except apps can be turned off in Settings. The last query comes ba
 ## Settings
 
 - **Shortcut**: click and press a new one. Escape cancels; Delete restores ⌥Space.
-- **Appearance**: theme (System, Light, Dark), size (Small, Medium, Large), translucency, and how many results show before the list scrolls.
+- **Appearance**: theme (System, Light, Dark), size (Small, Medium, Large), translucency, and how many results show before the list scrolls. A preview of the panel at the top of Settings shows each change as you make it.
 - **Search**: System Settings, files, calculator, and web search on or off, and the search engine.
 - **General**: show in the menu bar, and open at login. With the menu bar item hidden, open Common Command from Finder to get back to Settings.
 

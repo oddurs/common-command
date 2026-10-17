@@ -10,11 +10,22 @@ struct SettingsView: View {
     @State private var openAtLogin = LoginItem.isEnabled
     @State private var loginError: String?
 
+    private static let commandSpace = KeyCombo(keyCode: 49, modifiers: .command)
     private static let keyboardShortcuts = URL(
         string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!
 
     var body: some View {
         Form {
+            Section {
+                PanelPreview(
+                    panel: controller.panel, size: preferences.size, translucent: preferences.translucent,
+                    theme: preferences.theme, visibleRows: preferences.visibleRows, width: 400
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .listRowBackground(Color.clear)
+            }
+
             Section {
                 LabeledContent("Open Common Command") {
                     ShortcutRecorder(controller: controller, combo: $preferences.hotKey)
@@ -23,13 +34,30 @@ struct SettingsView: View {
                 Text("Shortcut")
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
-                    if let problem = controller.hotKeyProblem {
+                    if let conflict = Conflicts.holder(of: preferences.hotKey, among: controller.otherShortcuts) {
+                        Text(
+                            "\(preferences.hotKey.displayName) also opens \(conflict.owner), so only one of them will. Change it in \(conflict.whereToChange), or choose another shortcut here."
+                        )
+                        .foregroundStyle(.orange)
+                    } else if let problem = controller.hotKeyProblem {
                         Text(problem).foregroundStyle(.red)
                     }
-                    Text("To use ⌘Space, first turn off Spotlight's shortcut in Keyboard Shortcuts.")
+                    if let spaceHolder = Conflicts.holder(of: Self.commandSpace, among: controller.otherShortcuts),
+                        preferences.hotKey != Self.commandSpace
+                    {
+                        Text(
+                            "⌘Space belongs to \(spaceHolder.owner). To use it here, change it in \(spaceHolder.whereToChange) first."
+                        )
                         .foregroundStyle(.secondary)
-                    Button("Open Keyboard Shortcuts…") { NSWorkspace.shared.open(Self.keyboardShortcuts) }
-                        .buttonStyle(.link)
+                    }
+                    // The button only helps when the clash is Spotlight's; Alfred's is changed in Alfred.
+                    let involved = [preferences.hotKey, Self.commandSpace].compactMap {
+                        Conflicts.holder(of: $0, among: controller.otherShortcuts)
+                    }
+                    if involved.contains(where: { $0.owner.hasPrefix("Spotlight") }) {
+                        Button("Open Keyboard Shortcuts…") { NSWorkspace.shared.open(Self.keyboardShortcuts) }
+                            .buttonStyle(.link)
+                    }
                 }
                 .font(.callout)
             }

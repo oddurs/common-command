@@ -76,3 +76,19 @@ func keyName(_ keyCode: UInt16) -> String? {
 extension KeyCombo {
     var displayName: String { display(keyName: keyName) }
 }
+
+/// The global shortcuts Spotlight and Alfred hold on this Mac, read from their preferences. Missing or
+/// unreadable files just mean nothing to warn about.
+func otherAppsShortcuts() -> [Conflicts.Holder] {
+    var holders: [Conflicts.Holder] = []
+    if let symbolic = UserDefaults(suiteName: "com.apple.symbolichotkeys")?.dictionary(forKey: "AppleSymbolicHotKeys") {
+        holders += Conflicts.spotlight(symbolic)
+    }
+    let alfred = URL.applicationSupportDirectory.appending(path: "Alfred/prefs.json")
+    if let data = try? Data(contentsOf: alfred), let file = Conflicts.alfredHotkeyFile(prefsJSON: data),
+        let prefs = NSDictionary(contentsOf: file) as? [String: Any], let holder = Conflicts.alfred(prefs)
+    {
+        holders.append(holder)
+    }
+    return holders
+}
