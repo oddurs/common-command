@@ -1,6 +1,5 @@
 import AppKit
 import CommandKit
-import QuickLookUI
 import SwiftUI
 
 /// A borderless panel that takes typing without activating the app, so the app you were in stays
@@ -30,31 +29,6 @@ final class CommandPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    // MARK: Quick Look
-
-    /// The file Quick Look shows: the selected result's.
-    var previewURL: (() -> URL?)?
-    /// Keys pressed while Quick Look has focus; arrows still move the selection, as in Finder.
-    var onPreviewKey: ((NSEvent) -> Bool)?
-
-    override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool { true }
-
-    override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
-        MainActor.assumeIsolated {
-            panel.dataSource = self
-            panel.delegate = self
-        }
-    }
-
-    override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
-        MainActor.assumeIsolated {
-            panel.dataSource = nil
-            panel.delegate = nil
-            // Escape in Quick Look closes only the preview; typing carries on in the field.
-            if isVisible { makeKey() }
-        }
-    }
-
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         onKeyEquivalent?(event) == true || super.performKeyEquivalent(with: event)
     }
@@ -63,22 +37,6 @@ final class CommandPanel: NSPanel {
         // Before the event reaches the rows' hover tracking, so they know the pointer really moved.
         if event.type == .mouseMoved { onPointerMove?() }
         super.sendEvent(event)
-    }
-}
-
-// Quick Look calls these on the main thread; its protocols just predate saying so.
-extension CommandPanel: @preconcurrency QLPreviewPanelDataSource, @preconcurrency QLPreviewPanelDelegate {
-    func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {
-        previewURL?() == nil ? 0 : 1
-    }
-
-    func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> (any QLPreviewItem)! {
-        previewURL?() as NSURL?
-    }
-
-    func previewPanel(_ panel: QLPreviewPanel!, handle event: NSEvent!) -> Bool {
-        guard let event, event.type == .keyDown else { return false }
-        return onPreviewKey?(event) ?? false
     }
 }
 
@@ -106,13 +64,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.delegate = self
         panel.onKeyEquivalent = { [weak self] in self?.keyEquivalent($0) ?? false }
         panel.onPointerMove = { [weak self] in self?.model.pointerMoved = true }
-        panel.previewURL = { [weak self] in self?.model.selected?.fileURL }
-        panel.onPreviewKey = { [weak self] event in
-            guard let self, event.keyCode == 125 || event.keyCode == 126 else { return false }
-            model.move(event.keyCode == 125 ? 1 : -1)
-            QLPreviewPanel.shared().reloadData()
-            return true
-        }
+        model.onSelectionChange = { [weak self] in self?.updatePreview() }
         model.onResultsChange = { [weak self] in self?.resize() }
         library.onChange = { [weak self] in
             guard let self, panel.isVisible else { return }
@@ -127,8 +79,6 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        // After a preview the app hid itself to hand focus back; its windows can't show until it unhides.
-        if NSApp.isHidden { NSApp.unhideWithoutActivation() }
         library.refreshIfStale()
         buildContentIfNeeded()
         panel.appearance = preferences.theme.appearance
@@ -156,40 +106,44 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func hide() {
-        if previewing { QLPreviewPanel.shared().orderOut(nil) }
+        closePreview()
         panel.orderOut(nil)
-        // Quick Look's panel activates the app, which the launcher otherwise never does. Hiding hands focus
-        // back to the app you were in, unless a window of ours, such as Settings, is still open.
-        if previewedSinceShown {
-            previewedSinceShown = false
-            let othersOpen = NSApp.windows.contains { $0.isVisible && $0 !== panel && !($0 is QLPreviewPanel) }
-            if NSApp.isActive && !othersOpen { NSApp.hide(nil) }
-        }
-    }
-
-    private var previewedSinceShown = false
-
-    /// Quick Look takes focus from the panel while it shows; that's the one time losing focus doesn't close.
-    private var previewing: Bool {
-        QLPreviewPanel.sharedPreviewPanelExists() && QLPreviewPanel.shared().isVisible
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        // Checked a moment later: Quick Look takes focus before it reports itself visible.
-        DispatchQueue.main.async { [weak self] in
-            guard let self, !panel.isKeyWindow, !previewing else { return }
-            hide()
+        hide()
+    }
+
+    // MARK: Preview
+
+    /// Quick Look for the selected file, in a panel beside this one. It never takes focus, so typing, the
+    /// arrows, and Escape stay in the field, and the app you were in stays active throughout.
+    private var preview: PreviewPanel?
+
+    private func toggleQuickLook() {
+        if preview != nil {
+            closePreview()
+        } else if let url = model.selected?.fileURL {
+            let preview = PreviewPanel()
+            preview.appearance = panel.appearance
+            preview.show(url, beside: panel.frame, size: preferences.size)
+            panel.addChildWindow(preview, ordered: .above)
+            self.preview = preview
         }
     }
 
-    private func toggleQuickLook() {
-        if previewing {
-            QLPreviewPanel.shared().orderOut(nil)
-            panel.makeKey()
-        } else if model.selected?.fileURL != nil {
-            previewedSinceShown = true
-            QLPreviewPanel.shared().makeKeyAndOrderFront(nil)
-        }
+    /// Follows the selection while the preview is open; a result without a file closes it.
+    private func updatePreview() {
+        guard let preview else { return }
+        guard let url = model.selected?.fileURL else { return closePreview() }
+        preview.show(url, beside: panel.frame, size: preferences.size)
+    }
+
+    private func closePreview() {
+        guard let preview else { return }
+        panel.removeChildWindow(preview)
+        preview.orderOut(nil)
+        self.preview = nil
     }
 
     func preferencesChanged() {
@@ -310,9 +264,12 @@ final class PanelController: NSObject, NSWindowDelegate {
         model.scope = model.scope == scope ? .all : scope
     }
 
-    /// Escape leaves a scope first, like deleting a search token, and closes the panel after that.
+    /// Escape closes the preview first, then leaves a scope, like deleting a search token, and closes the
+    /// panel after that.
     private func cancel() {
-        if model.scope != .all {
+        if preview != nil {
+            closePreview()
+        } else if model.scope != .all {
             model.scope = .all
         } else {
             hide()
@@ -439,6 +396,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             NSRect(x: panel.frame.midX - size.width / 2, y: top - height, width: size.width, height: height),
             display: false)
         refreshShadow()
+        updatePreview()
     }
 
     /// The shadow follows the window's shape as last drawn, so it's recomputed once the new frame has

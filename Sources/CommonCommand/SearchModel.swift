@@ -15,7 +15,10 @@ final class SearchModel {
     /// Every row in display order, which is the order the selection moves through.
     private(set) var results: [Ranked] = []
     var selection = 0 {
-        didSet { announceSelection() }
+        didSet {
+            announceSelection()
+            if selection != oldValue { onSelectionChange?() }
+        }
     }
     /// Everything, or only apps, files, or actions. With nothing typed, a scope lists what it holds.
     var scope = Scope.all {
@@ -31,6 +34,7 @@ final class SearchModel {
     @ObservationIgnored var pointerMoved = false
 
     @ObservationIgnored var onResultsChange: (() -> Void)?
+    @ObservationIgnored var onSelectionChange: (() -> Void)?
     @ObservationIgnored private let library: Library
     @ObservationIgnored private let preferences: Preferences
     @ObservationIgnored private var files: [Candidate] = []

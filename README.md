@@ -40,7 +40,7 @@ Spotlight owns ⌘Space on a new Mac, and launchers such as Alfred often take it
 | ↩ | Open the selected result, or copy a calculation |
 | ⌘↩ | Show the selected file or app in Finder |
 | ⌘K, or a right-click | The action menu: Open, Show in Finder, Quick Look, Copy Path, and Hide or Quit for a running app |
-| ⌘Y | Quick Look the selected file; ↑ ↓ keep moving through the results |
+| ⌘Y | Quick Look the selected file beside the panel; ↑ ↓ move through the results and the preview follows, ⎋ closes it |
 | ⌘⇧C | Copy the path, link, or result |
 | ⌘1 ⌘2 ⌘3 | Search only Apps, Files, or Actions; press again for everything |
 | ⌫ in an empty field | Leave the scope |
