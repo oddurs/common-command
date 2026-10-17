@@ -58,7 +58,8 @@ struct SettingsView: View {
             Section {
                 Toggle("System Settings", isOn: $preferences.searchesSettings)
                 Toggle("Files and folders", isOn: $preferences.searchesFiles)
-                Toggle("Calculator", isOn: $preferences.calculates)
+                Toggle("Calculator and conversions", isOn: $preferences.calculates)
+                Toggle("Shortcuts and app actions", isOn: $preferences.searchesActions)
                 Toggle("Web search", isOn: $preferences.searchesWeb)
                 Picker("Search engine", selection: $preferences.engine) {
                     ForEach(SearchEngine.allCases) { Text($0.name).tag($0) }
@@ -67,9 +68,11 @@ struct SettingsView: View {
             } header: {
                 Text("Search")
             } footer: {
-                Text("Apps are always searched. Files come from the Spotlight index of your home folder.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "Apps are always searched. Files come from the Spotlight index of your home folder. ⌘1, ⌘2, and ⌘3 search only apps, files, or actions, whatever is switched off here."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
 
             Section {

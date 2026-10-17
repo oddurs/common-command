@@ -1,6 +1,7 @@
 import AppKit
+import CommandKit
 
-/// `CommonCommand --snapshot out.png [query] [--theme light|dark]` draws the panel with `query` typed into
+/// `CommonCommand --snapshot out.png [query] [--theme light|dark] [--scope apps|files|actions]` draws the panel with `query` typed into
 /// an image and quits. It renders offscreen, so nothing appears on screen and nothing takes focus; glass
 /// shows as a solid fill, since only the window server can draw it.
 @MainActor
@@ -9,6 +10,7 @@ enum Snapshot {
         var output: String
         var query: String
         var theme: Theme?
+        var scope = Scope.all
     }
 
     static func request(from arguments: [String]) -> Request? {
@@ -19,13 +21,20 @@ enum Snapshot {
             theme = Theme(rawValue: rest[flag + 1])
             rest.removeSubrange(flag...(flag + 1))
         }
+        var scope = Scope.all
+        if let flag = rest.firstIndex(of: "--scope"), flag + 1 < rest.count {
+            scope = Scope(rawValue: rest[flag + 1]) ?? .all
+            rest.removeSubrange(flag...(flag + 1))
+        }
         let query = rest.first { !$0.hasPrefix("--") } ?? ""
-        return Request(output: arguments[index + 1], query: query, theme: theme)
+        return Request(output: arguments[index + 1], query: query, theme: theme, scope: scope)
     }
 
     static func run(_ request: Request, panel: PanelController, preferences: Preferences) {
         // Offscreen there's no glass, so draw the solid surfaces instead of nothing.
         preferences.translucent = false
+        panel.prepareForSnapshot()
+        panel.model.scope = request.scope
         panel.model.query = request.query
         // Long enough for the app scan and the Spotlight file query to land.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {

@@ -200,6 +200,12 @@ public enum FileResults {
     /// anyone is looking for.
     static let clutter = ["/Library/", "/.", ".app/", "/node_modules/", "/target/", "/DerivedData/", "/__pycache__/"]
 
+    /// Recently opened files, most recent first, for the Files scope with nothing typed.
+    public static func recent(_ found: [Found], home: String, now: Date) -> [Candidate] {
+        let ordered = found.filter { $0.lastUsed != nil }.sorted { $0.lastUsed! > $1.lastUsed! }
+        return candidates(ordered, home: home, now: now)
+    }
+
     public static func candidates(_ found: [Found], home: String, now: Date) -> [Candidate] {
         // Spotlight can list one file twice, for instance while it re-indexes it.
         var seen: Set<String> = []

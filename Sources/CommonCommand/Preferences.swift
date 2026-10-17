@@ -29,6 +29,7 @@ final class Preferences {
     var searchesFiles: Bool { didSet { defaults.set(searchesFiles, forKey: "searchesFiles") } }
     var calculates: Bool { didSet { defaults.set(calculates, forKey: "calculates") } }
     var searchesWeb: Bool { didSet { defaults.set(searchesWeb, forKey: "searchesWeb") } }
+    var searchesActions: Bool { didSet { defaults.set(searchesActions, forKey: "searchesActions") } }
     var engine: SearchEngine { didSet { defaults.set(engine.rawValue, forKey: "engine") } }
     var showsMenuBarItem: Bool { didSet { defaults.set(showsMenuBarItem, forKey: "showsMenuBarItem") } }
 
@@ -38,7 +39,7 @@ final class Preferences {
         self.defaults = defaults
         defaults.register(defaults: [
             "translucent": true, "visibleRows": 8, "searchesSettings": true, "searchesFiles": true, "calculates": true,
-            "searchesWeb": true, "showsMenuBarItem": true,
+            "searchesWeb": true, "searchesActions": true, "showsMenuBarItem": true,
         ])
         hotKey =
             defaults.data(forKey: "hotKey").flatMap { try? JSONDecoder().decode(KeyCombo.self, from: $0) } ?? .standard
@@ -50,6 +51,7 @@ final class Preferences {
         searchesFiles = defaults.bool(forKey: "searchesFiles")
         calculates = defaults.bool(forKey: "calculates")
         searchesWeb = defaults.bool(forKey: "searchesWeb")
+        searchesActions = defaults.bool(forKey: "searchesActions")
         engine = defaults.string(forKey: "engine").flatMap(SearchEngine.init) ?? .google
         showsMenuBarItem = defaults.bool(forKey: "showsMenuBarItem")
     }

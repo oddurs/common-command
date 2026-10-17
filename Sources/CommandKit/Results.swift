@@ -8,6 +8,9 @@ public struct SearchOptions: Sendable, Equatable {
     public var limit = 8
     public var fileLimit = 5
     public var locale = Locale.current
+    public var scope = Scope.all
+    /// How many results a scope shows: more than everything does, since it's one kind of thing.
+    public var scopedLimit = 40
 
     public init() {}
 }
@@ -34,7 +37,19 @@ public enum Results {
         options: SearchOptions
     ) -> [ResultSection] {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return [] }
+        let scope = options.scope
+        let candidates = candidates.filter { scope.includes($0.item.kind) }
+        let files = scope.includes(.file) ? files : []
+        guard !text.isEmpty else {
+            return scope == .all ? [] : browse(scope, candidates: candidates, files: files)
+        }
+        guard scope == .all else {
+            let limit = options.scopedLimit
+            return group(
+                merge(
+                    Ranker.rank(candidates, query: text, usage: usage, now: now, limit: limit),
+                    Ranker.rank(files, query: text, usage: usage, now: now, limit: limit)))
+        }
         var sections: [ResultSection] = []
 
         if let url = Web.address(text) {
@@ -69,6 +84,41 @@ public enum Results {
             sections.append(ResultSection(title: "Search the Web", rows: [Ranked(item: item, score: .min)]))
         }
         return sections
+    }
+
+    /// A scope with nothing typed lists what it holds, as Spotlight's Apps view does: apps and panes from A
+    /// to Z, files in the order given (most recently used first), actions from A to Z.
+    static func browse(_ scope: Scope, candidates: [Candidate], files: [Candidate]) -> [ResultSection] {
+        func sorted(_ kind: Kind) -> [Ranked] {
+            // Settings topics are left out: hundreds of them would bury the panes.
+            candidates.filter { $0.item.kind == kind && !($0.item.kind == .settings && $0.matchesWordStarts) }
+                .sorted { $0.item.title.localizedStandardCompare($1.item.title) == .orderedAscending }
+                .map { Ranked(item: $0.item, score: 0) }
+        }
+        let sections: [ResultSection]
+        switch scope {
+        case .all:
+            sections = []
+        case .apps:
+            sections = [
+                ResultSection(title: "Applications", rows: sorted(.application)),
+                ResultSection(title: "System Settings", rows: sorted(.settings)),
+            ]
+        case .files:
+            sections = [ResultSection(title: "Recent Files", rows: files.map { Ranked(item: $0.item, score: 0) })]
+        case .actions:
+            // Shortcuts from A to Z; running apps in the order given, which keeps each app's Quit and Hide together.
+            let shortcuts = sorted(.action).filter { if case .shortcut = $0.item.action { true } else { false } }
+            let running = candidates.filter {
+                if case .shortcut = $0.item.action { return false }
+                return $0.item.kind == .action
+            }
+            sections = [
+                ResultSection(title: "Shortcuts", rows: shortcuts),
+                ResultSection(title: "Running Apps", rows: running.map { Ranked(item: $0.item, score: 0) }),
+            ]
+        }
+        return sections.filter { !$0.rows.isEmpty }
     }
 
     /// Two best-first lists as one, best first; on a tie the first list's entry leads.
@@ -108,6 +158,7 @@ public enum Results {
         case .application: "Applications"
         case .settings: "System Settings"
         case .command: "Common Command"
+        case .action: "Actions"
         case .file, .folder: "Files"
         case .calculation: "Calculator"
         case .link: "Website"
