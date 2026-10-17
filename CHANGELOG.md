@@ -19,6 +19,13 @@ All notable changes to this project are documented here. The format follows [Kee
 - A result chosen for a query also leans shorter and longer starts of that query its way, so you can type less next time.
 - Unit conversions such as "10 km to mi", "70 f in c", or "5 GB in MB", offline, with Return to copy.
 - Moving the pointer over a result selects it, and apps, files, and folders can be dragged out of the panel.
+- A macOS 26 look: a glass capsule for the field and a glass card for results, grouped into Top Hit, Applications, System Settings, Files, and Search the Web. A short fade on opening, none with Reduce Motion.
+- "No Results" when nothing matches and web search is off.
+
+### Changed
+
+- Rows say less: no "Application" label, a pane's name instead of "System Settings ›", and file paths keep their start and end when shortened.
+- System Settings topics match only where each typed word starts a word of the topic, and keywords only from the fourth letter, so a short query finds apps instead of a dozen loosely related settings.
 
 ### Fixed
 

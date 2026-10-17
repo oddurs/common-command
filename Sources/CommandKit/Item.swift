@@ -52,8 +52,15 @@ public struct Candidate: Sendable {
     /// clearly closer name still wins: "Bluetooth" the pane over "Bluetooth File Exchange" the app.
     public let weight: Int
 
-    public init(_ item: Item, alternatives: [String] = [], keywords: [String] = [], weight: Int = 0) {
+    /// Matches only where each typed word starts a word of a name, never as scattered letters or initials.
+    let matchesWordStarts: Bool
+
+    public init(
+        _ item: Item, alternatives: [String] = [], keywords: [String] = [], weight: Int = 0,
+        matchesWordStarts: Bool = false
+    ) {
         self.item = item
+        self.matchesWordStarts = matchesWordStarts
         var seen: Set<String> = [item.title]
         names = [SearchText(item.title)] + alternatives.filter { seen.insert($0).inserted }.map(SearchText.init)
         // Each keyword whole, spaces dropped, and each of its words, so "darkm" and "mode" both find "Dark Mode".

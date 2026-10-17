@@ -43,9 +43,10 @@ import Testing
         options.locale = us
         let results = Results.compose(
             query: "1 mi to km", candidates: [app("Miro")], files: [], usage: Usage(), now: Date(), options: options)
-        #expect(results.first?.item.title == "= 1.60934 km")
-        #expect(results.first?.item.action == .copy("1.60934"))
-        #expect(results.filter { $0.item.kind == .calculation }.count == 1)
+        #expect(results.first?.title == "Conversion")
+        #expect(results.rows.first?.item.title == "1.60934 km")
+        #expect(results.rows.first?.item.action == .copy("1.60934"))
+        #expect(results.rows.filter { $0.item.kind == .calculation }.count == 1)
     }
 
     @Test func showsSixFiguresAndCopiesWhatItShows() {
@@ -53,8 +54,8 @@ import Testing
         options.locale = us
         let results = Results.compose(
             query: "70 f in c", candidates: [], files: [], usage: Usage(), now: Date(), options: options)
-        #expect(results.first?.item.title == "= 21.1111 °C")
-        #expect(results.first?.item.action == .copy("21.1111"))
+        #expect(results.rows.first?.item.title == "21.1111 °C")
+        #expect(results.rows.first?.item.action == .copy("21.1111"))
     }
 
     @Test func turnsOffWithTheCalculator() {
@@ -62,6 +63,6 @@ import Testing
         options.calculator = false
         let results = Results.compose(
             query: "1 mi to km", candidates: [], files: [], usage: Usage(), now: Date(), options: options)
-        #expect(!results.contains { $0.item.kind == .calculation })
+        #expect(!results.rows.contains { $0.item.kind == .calculation })
     }
 }

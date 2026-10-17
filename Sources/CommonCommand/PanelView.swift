@@ -2,77 +2,110 @@ import AppKit
 import CommandKit
 import SwiftUI
 
-/// The search field and the results under it.
-struct PanelView: View {
+/// The search field, in its capsule.
+struct FieldView: View {
     @Bindable var model: SearchModel
     let preferences: Preferences
     let commands: SearchField.Commands
+
+    private var size: PanelSize { preferences.size }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: size.fieldFontSize * 0.82, weight: .medium))
+                .foregroundStyle(.secondary)
+            SearchField(model: model, fontSize: size.fieldFontSize, commands: commands)
+        }
+        .padding(.leading, size.fieldHeight * 0.36)
+        .padding(.trailing, size.fieldHeight * 0.3)
+        .frame(width: size.width, height: size.fieldHeight)
+        .surface(radius: size.fieldRadius, solid: !preferences.translucent)
+    }
+}
+
+/// The results, in sections, on their own card under the field.
+struct CardView: View {
+    let model: SearchModel
+    let preferences: Preferences
     let choose: (Int) -> Void
 
     private var size: PanelSize { preferences.size }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: size.fieldFontSize * 0.8, weight: .medium))
-                    .foregroundStyle(.secondary)
-                SearchField(model: model, fontSize: size.fieldFontSize, commands: commands)
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 0) {
+                    if model.showsNoResults {
+                        Text("No Results")
+                            .font(.system(size: size.rowFontSize))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, minHeight: size.rowHeight)
+                    }
+                    ForEach(Array(sectionStarts.enumerated()), id: \.element.section.id) { _, entry in
+                        SectionHeader(title: entry.section.title, size: size)
+                        ForEach(Array(entry.section.rows.enumerated()), id: \.element.id) { offset, ranked in
+                            let index = entry.start + offset
+                            ResultRow(
+                                ranked: ranked, size: size, isSelected: index == model.selection,
+                                shortcut: model.showsShortcuts && index < 9 ? "⌘\(index + 1)" : nil
+                            )
+                            .id(index)
+                            .onTapGesture { choose(index) }
+                            .onContinuousHover { phase in
+                                if case .active = phase { model.hover(index) }
+                            }
+                            .dragsFile(ranked.item.fileURL)
+                        }
+                    }
+                }
+                .padding(size.cardPadding)
             }
-            .padding(.horizontal, 16)
-            .frame(height: size.fieldHeight)
+            .scrollIndicators(.automatic)
+            .onChange(of: model.selection) { _, selection in proxy.scrollTo(selection) }
+        }
+        .frame(width: size.width)
+        .frame(maxHeight: .infinity)
+        .surface(radius: size.cardRadius, solid: !preferences.translucent)
+    }
 
-            if !model.results.isEmpty {
-                Divider().opacity(0.6)
-                ResultList(model: model, size: size, visibleRows: preferences.visibleRows, choose: choose)
-            }
-        }
-        .frame(width: size.width, alignment: .top)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background {
-            if !preferences.translucent {
-                RoundedRectangle(cornerRadius: size.cornerRadius, style: .continuous)
-                    .fill(Color(nsColor: .windowBackgroundColor))
-            }
-        }
-        .overlay {
-            // A hairline edge, as on menus and popovers, so the panel holds its shape over any background.
-            RoundedRectangle(cornerRadius: size.cornerRadius, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+    /// Each section with the overall index of its first row, so rows know their place in the selection.
+    private var sectionStarts: [(section: ResultSection, start: Int)] {
+        var start = 0
+        return model.sections.map { section in
+            defer { start += section.rows.count }
+            return (section, start)
         }
     }
 }
 
-private struct ResultList: View {
-    let model: SearchModel
+private struct SectionHeader: View {
+    let title: String
     let size: PanelSize
-    let visibleRows: Int
-    let choose: (Int) -> Void
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical) {
-                VStack(spacing: 0) {
-                    ForEach(Array(model.results.enumerated()), id: \.element.id) { index, ranked in
-                        ResultRow(
-                            ranked: ranked, size: size, isSelected: index == model.selection,
-                            shortcut: model.showsShortcuts && index < 9 ? "⌘\(index + 1)" : nil
-                        )
-                        .id(index)
-                        .onTapGesture { choose(index) }
-                        .onContinuousHover { phase in
-                            if case .active = phase { model.hover(index) }
-                        }
-                        .dragsFile(ranked.item.fileURL)
-                    }
-                }
-                .padding(size.listPadding)
+        Text(title)
+            .font(.system(size: size.headerFontSize, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: size.headerHeight, alignment: .bottomLeading)
+            .padding(.bottom, 2)
+            .frame(height: size.headerHeight)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+extension View {
+    /// The drawn part of a glass shape: a solid fill when translucency is off (the glass sits behind in
+    /// AppKit otherwise), and a hairline edge either way, as on menus and popovers.
+    func surface(radius: CGFloat, solid: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        return
+            self
+            .background {
+                if solid { shape.fill(Color(nsColor: .windowBackgroundColor)) }
             }
-            .scrollIndicators(.automatic)
-            .scrollDisabled(model.results.count <= visibleRows)
-            .frame(height: CGFloat(min(model.results.count, visibleRows)) * size.rowHeight + 2 * size.listPadding)
-            .onChange(of: model.selection) { _, selection in proxy.scrollTo(selection) }
-        }
+            .overlay { shape.strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5) }
     }
 }
 
@@ -101,10 +134,11 @@ private struct ResultRow: View {
                 .truncationMode(.middle)
             Spacer(minLength: 16)
             Text(shortcut ?? ranked.item.subtitle)
-                .font(.system(size: size.rowFontSize - 1))
+                .font(.system(size: size.rowFontSize - 2))
                 .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.8)) : AnyShapeStyle(.secondary))
                 .lineLimit(1)
-                .truncationMode(.head)
+                // A path keeps its start and its end: "~/Code/…/src" says more than "…ode/app/src".
+                .truncationMode(.middle)
                 .layoutPriority(-1)
         }
         .font(.system(size: size.rowFontSize))
@@ -113,7 +147,7 @@ private struct ResultRow: View {
         .frame(height: size.rowHeight)
         .background {
             if isSelected {
-                RoundedRectangle(cornerRadius: size.cornerRadius - size.listPadding, style: .continuous)
+                RoundedRectangle(cornerRadius: size.rowRadius, style: .continuous)
                     .fill(Color.accentColor)
             }
         }

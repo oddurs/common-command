@@ -7,7 +7,7 @@ A small, fast launcher for macOS. Press ⌥Space, type a few letters, press Retu
 
 Common Command is built to feel like part of macOS:
 
-- **It matches your Mac.** The panel follows light and dark mode, uses Liquid Glass on macOS 26 (the popover material before that), and highlights with your accent colour. Choose a fixed theme, a solid background, or a size in Settings.
+- **It looks like macOS 26.** A Liquid Glass capsule for the search field and a glass card for the results under it, with Spotlight's sections: the Top Hit, then Applications, System Settings, Files, and the web. It follows light and dark mode and highlights with your accent colour; earlier macOS versions get the popover material. Choose a fixed theme, a solid background, or a size in Settings.
 - **It stays out of the way.** The panel never activates the app, so the app you were in stays frontmost and keeps its menu bar. Escape, or a click anywhere else, returns you to it with nothing to restore.
 - **It learns.** Whatever you choose for a query comes first the next time you type it, and leans the same way for a shorter start: choose Safari for "safari" once, and "sa" prefers it too. Things you open often rise for every query. Usage decays with a one-week half-life, so last year's habits fade.
 - **Typing is forgiving.** "vsc" finds Visual Studio Code, "sys set" finds System Settings, "cafe" finds Café. Matched letters are drawn in bold.
@@ -102,7 +102,7 @@ scripts/agent doctor    # check tools and repository state
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
 
-`swift build && .build/debug/CommonCommand --snapshot out.png "query" --theme dark` opens the real panel with the query typed, captures it, and quits. Use it to review design changes. It uses its own settings, so it never changes yours.
+`swift build && .build/debug/CommonCommand --snapshot out.png "query" --theme dark` draws the panel with the query typed into `out.png` and quits. It renders offscreen, so nothing appears on screen and nothing takes focus; glass shows as a solid fill. It uses its own settings, so it never changes yours.
 
 Layout:
 

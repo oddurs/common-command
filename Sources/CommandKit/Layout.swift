@@ -1,7 +1,7 @@
 import CoreGraphics
 
-/// The panel's dimensions. Every size is a little smaller than Spotlight's: one line of type and a short
-/// list, not a window.
+/// The panel's dimensions: a capsule search field and, under it, a card of results. Every size is a little
+/// smaller than Spotlight's: one line of type and a short list, not a window.
 public enum PanelSize: String, CaseIterable, Sendable, Identifiable {
     case small, medium, large
 
@@ -17,9 +17,9 @@ public enum PanelSize: String, CaseIterable, Sendable, Identifiable {
 
     public var fieldHeight: CGFloat {
         switch self {
-        case .small: 42
-        case .medium: 48
-        case .large: 54
+        case .small: 44
+        case .medium: 50
+        case .large: 56
         }
     }
 
@@ -47,14 +47,30 @@ public enum PanelSize: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
-    public var iconSize: CGFloat { rowHeight - 12 }
-    public var cornerRadius: CGFloat { fieldHeight / 2.6 }
-    /// Space around the list, so the selection's rounded corners don't touch the panel's edge.
-    public var listPadding: CGFloat { 6 }
+    public var headerHeight: CGFloat { rowHeight * 0.75 }
+    public var headerFontSize: CGFloat { rowFontSize - 3 }
+    public var iconSize: CGFloat { rowHeight - 10 }
+    /// The field is a capsule, as on macOS 26.
+    public var fieldRadius: CGFloat { fieldHeight / 2 }
+    public var cardRadius: CGFloat { rowHeight * 0.6 }
+    public var rowRadius: CGFloat { cardRadius - cardPadding }
+    /// Space inside the card, so the selection's rounded corners sit inside the card's.
+    public var cardPadding: CGFloat { 7 }
+    /// Between the field and the card: two pieces of glass, not one box.
+    public var gap: CGFloat { 8 }
 
-    /// The panel's height with `rows` results, of which at most `visible` show before the list scrolls.
-    public func height(rows: Int, visible: Int) -> CGFloat {
+    /// The card's height for `rows` results under `headers` section headers, scrolling past `visible` rows.
+    public func cardHeight(rows: Int, headers: Int, visible: Int) -> CGFloat {
+        guard rows > 0 else { return 0 }
+        let content = CGFloat(rows) * rowHeight + CGFloat(headers) * headerHeight
+        // Room for the visible rows and a couple of headers; past that the list scrolls.
+        let cap = CGFloat(max(visible, 1)) * rowHeight + 2 * headerHeight
+        return min(content, cap) + 2 * cardPadding
+    }
+
+    /// The whole panel: the field alone, or the field, the gap, and the card.
+    public func height(rows: Int, headers: Int, visible: Int) -> CGFloat {
         guard rows > 0 else { return fieldHeight }
-        return fieldHeight + 1 + CGFloat(min(rows, max(visible, 1))) * rowHeight + 2 * listPadding
+        return fieldHeight + gap + cardHeight(rows: rows, headers: headers, visible: visible)
     }
 }

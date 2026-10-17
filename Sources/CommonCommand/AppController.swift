@@ -22,11 +22,11 @@ final class AppController: NSObject {
         library.commands = [
             Candidate(
                 Item(
-                    id: "command:settings", title: "Common Command Settings", subtitle: "Command", kind: .command,
+                    id: "command:settings", title: "Common Command Settings", subtitle: "", kind: .command,
                     action: .command("settings")), alternatives: ["Preferences"]),
             Candidate(
                 Item(
-                    id: "command:quit", title: "Quit Common Command", subtitle: "Command", kind: .command,
+                    id: "command:quit", title: "Quit Common Command", subtitle: "", kind: .command,
                     action: .command("quit"))),
         ]
         library.refreshIfStale()

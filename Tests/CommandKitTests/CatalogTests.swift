@@ -66,7 +66,7 @@ import Testing
 
     @Test func findsPanesAndTopicsOnThisMac() {
         let found = SettingsPanes.scan(isPortable: true)
-        let panes = found.filter { $0.item.subtitle == "System Settings" && !$0.item.id.contains("#") }
+        let panes = found.filter { !$0.item.id.contains("#") }
         #expect(panes.count > 10)
         #expect(found.count > panes.count)
         #expect(found.allSatisfy { $0.item.kind == .settings })
@@ -102,8 +102,8 @@ import Testing
             identifier: "appearance", name: "Appearance", topics: SettingsPanes.topics(in: terms, isPortable: true),
             target: target, icon: nil)
         #expect(candidates.map(\.item.title) == ["Appearance", "Accent color", "Low Power Mode"])
-        #expect(candidates[0].item.subtitle == "System Settings")
-        #expect(candidates[1].item.subtitle == "System Settings › Appearance")
+        #expect(candidates[0].item.subtitle == "")
+        #expect(candidates[1].item.subtitle == "Appearance")
         #expect(candidates[1].weight < candidates[0].weight)
         #expect(Fuzzy.keywordScore(Fuzzy.prepare("dark"), candidates[0].keywords) != nil)
     }
@@ -114,7 +114,8 @@ import Testing
             topics: [.init(title: "Battery", keywords: ["charge"]), .init(title: "Low Power Mode", keywords: [])],
             target: target, icon: nil)
         #expect(candidates.map(\.item.title) == ["Battery", "Low Power Mode"])
-        #expect(candidates.allSatisfy { $0.item.subtitle == "System Settings" })
+        #expect(candidates.allSatisfy { $0.item.subtitle == "" })
+        #expect(candidates.allSatisfy { $0.matchesWordStarts })
     }
 }
 
@@ -165,14 +166,26 @@ import Testing
 }
 
 @Suite struct LayoutTests {
-    @Test func theFieldAloneIsOneLine() {
-        #expect(PanelSize.medium.height(rows: 0, visible: 8) == PanelSize.medium.fieldHeight)
+    let size = PanelSize.medium
+
+    @Test func theFieldAloneIsOneCapsule() {
+        #expect(size.height(rows: 0, headers: 0, visible: 8) == size.fieldHeight)
+        #expect(size.fieldRadius * 2 == size.fieldHeight)
+    }
+
+    @Test func theCardSitsBelowTheFieldWithAGap() {
+        let card = size.cardHeight(rows: 2, headers: 1, visible: 8)
+        #expect(size.height(rows: 2, headers: 1, visible: 8) == size.fieldHeight + size.gap + card)
+        #expect(card == 2 * size.rowHeight + size.headerHeight + 2 * size.cardPadding)
     }
 
     @Test func growsWithResultsUntilItScrolls() {
-        let size = PanelSize.medium
-        #expect(size.height(rows: 3, visible: 8) < size.height(rows: 8, visible: 8))
-        #expect(size.height(rows: 8, visible: 8) == size.height(rows: 20, visible: 8))
+        #expect(size.height(rows: 3, headers: 2, visible: 8) < size.height(rows: 8, headers: 2, visible: 8))
+        #expect(size.height(rows: 9, headers: 3, visible: 8) == size.height(rows: 30, headers: 5, visible: 8))
+    }
+
+    @Test func theSelectionsCornersNestInTheCards() {
+        #expect(PanelSize.allCases.allSatisfy { $0.rowRadius + $0.cardPadding == $0.cardRadius })
     }
 
     @Test func everySizeIsSmallerThanSpotlight() {

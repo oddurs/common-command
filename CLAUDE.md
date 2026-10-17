@@ -35,4 +35,4 @@ Conventional Commits: `type(scope): subject`. Write the subject in the imperativ
 - The panel is a non-activating `NSPanel`. Don't call `NSApp.activate()` when showing it; the user's app must stay frontmost.
 - A bug fix comes with the test that would have caught it. Ranking changes need a test showing the order they fix.
 - `CommonTools.swift` is shared word for word across the Common Tools apps. Change it in all of them together.
-- For visual review, use `swift build && .build/debug/CommonCommand --snapshot out.png "query" [--theme light|dark]` and inspect `out.png`.
+- For visual review, use `swift build && .build/debug/CommonCommand --snapshot out.png "query" [--theme light|dark]` and inspect `out.png`. It renders offscreen; never drive the live screen with synthesized keys or the global shortcut to check a design.
